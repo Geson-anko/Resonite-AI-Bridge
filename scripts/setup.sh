@@ -20,6 +20,11 @@
 
 set -euo pipefail
 
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+SCRIPT_NAME="setup"
+# shellcheck source=lib.sh
+source "$SCRIPT_DIR/lib.sh"
+
 # ===== Configuration =========================================================
 DOTNET_CHANNEL="${DOTNET_CHANNEL:-10.0}"
 DOTNET_INSTALL_DIR="${DOTNET_INSTALL_DIR:-$HOME/.dotnet}"
@@ -27,59 +32,7 @@ PROTOC_VERSION="${PROTOC_VERSION:-29.3}"
 PROTOC_INSTALL_DIR="${PROTOC_INSTALL_DIR:-$HOME/.local}"
 JUST_INSTALL_DIR="${JUST_INSTALL_DIR:-$HOME/.local/bin}"
 
-REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-
-# ===== Helpers ===============================================================
-log()  { printf '\n\033[1;36m[setup]\033[0m %s\n' "$*"; }
-warn() { printf '\033[1;33m[setup:warn]\033[0m %s\n' "$*" >&2; }
-die()  { printf '\033[1;31m[setup:err]\033[0m %s\n' "$*" >&2; exit 1; }
-have() { command -v "$1" >/dev/null 2>&1; }
-
-require_linux() {
-  [[ "$(uname -s)" == "Linux" ]] || die "This setup script supports Linux only (got $(uname -s))."
-}
-
-detect_distro() {
-  if [[ -r /etc/os-release ]]; then
-    # shellcheck disable=SC1091
-    . /etc/os-release
-    case " ${ID_LIKE:-} ${ID:-} " in
-      *' debian '*|*' ubuntu '*) echo debian ;;
-      *' fedora '*|*' rhel '*|*' centos '*) echo fedora ;;
-      *' arch '*) echo arch ;;
-      *' suse '*|*' opensuse '*) echo suse ;;
-      *) echo unknown ;;
-    esac
-  else
-    echo unknown
-  fi
-}
-
-# Append a line to the user shell rc if not already present.
-add_to_shell_profile() {
-  local line="$1"
-  local profile
-  case "${SHELL:-}" in
-    */zsh)  profile="$HOME/.zshrc" ;;
-    */bash) profile="$HOME/.bashrc" ;;
-    *)      profile="$HOME/.profile" ;;
-  esac
-  touch "$profile"
-  if ! grep -qsF -- "$line" "$profile"; then
-    printf '%s\n' "$line" >> "$profile"
-    log "Added to $profile: $line"
-  fi
-}
-
-ensure_local_bin_on_path() {
-  case ":$PATH:" in
-    *":$HOME/.local/bin:"*) ;;
-    *)
-      add_to_shell_profile 'export PATH="$HOME/.local/bin:$PATH"'
-      export PATH="$HOME/.local/bin:$PATH"
-      ;;
-  esac
-}
+REPO_ROOT="$(repo_root)"
 
 # ===== 1. System prerequisites (minimal, distro-detected) ====================
 install_system_prereqs() {
@@ -102,8 +55,8 @@ install_system_prereqs() {
   distro=$(detect_distro)
   log "Installing system prereqs: ${missing[*]} (distro: $distro)"
 
-  local sudo_cmd=""
-  [[ $EUID -eq 0 ]] || sudo_cmd="sudo"
+  local sudo_cmd
+  sudo_cmd=$(sudo_prefix)
 
   case "$distro" in
     debian)
