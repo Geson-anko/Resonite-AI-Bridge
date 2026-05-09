@@ -101,12 +101,13 @@ repos:
 
   # ===== C# =====
   # csharpier は scripts/setup.sh で `dotnet tool install -g csharpier` 済み前提。
-  # `dotnet csharpier format` で変更ファイルだけを in-place 整形する。
+  # csharpier 1.x は `dotnet csharpier` 構文をサポートしないため `csharpier` を直接呼ぶ。
+  # ~/.dotnet/tools/ が PATH に乗っている必要がある (setup.sh が ~/.bashrc に追記済み)。
   - repo: local
     hooks:
       - id: csharpier
         name: csharpier
-        entry: dotnet csharpier format
+        entry: csharpier format
         language: system
         types_or: [c#]
         pass_filenames: true
