@@ -63,6 +63,10 @@ repos:
     hooks:
       - id: docformatter
         args: [--in-place, --wrap-summaries=79, --wrap-descriptions=72]
+        # protoc-gen-python_betterproto2 の出力 (commit 対象) を素通しする。
+        # docformatter で書き換えると次回 just gen-proto 実行時に diff が
+        # 戻り、CI の "再生成 diff チェック" を壊すため。
+        exclude: ^python/src/resobridge/_generated/
 
   # Python pygrep checks
   - repo: https://github.com/pre-commit/pygrep-hooks
