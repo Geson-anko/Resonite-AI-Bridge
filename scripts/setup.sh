@@ -121,8 +121,10 @@ install_dotnet() {
   "$installer" --channel "$DOTNET_CHANNEL" --install-dir "$DOTNET_INSTALL_DIR"
   rm -f "$installer"
 
+  # `$DOTNET_INSTALL_DIR` は install-time に展開して rc に書き、`$PATH` のみ
+  # 起動時展開させる ($DOTNET_INSTALL_DIR は呼び出し側 shell で必ず set されているとは限らないため)。
   add_to_shell_profile "export DOTNET_ROOT=\"$DOTNET_INSTALL_DIR\""
-  add_to_shell_profile "export PATH=\"$DOTNET_INSTALL_DIR:\$DOTNET_INSTALL_DIR/tools:\$PATH\""
+  add_to_shell_profile "export PATH=\"$DOTNET_INSTALL_DIR:$DOTNET_INSTALL_DIR/tools:\$PATH\""
 
   export DOTNET_ROOT="$DOTNET_INSTALL_DIR"
   export PATH="$DOTNET_INSTALL_DIR:$DOTNET_INSTALL_DIR/tools:$PATH"
