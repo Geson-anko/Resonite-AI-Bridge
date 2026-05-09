@@ -1,0 +1,49 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <!--
+    ResoniteAIBridge ユニットテスト。
+
+    xunit を採用 (CLAUDE.md §テスト方針)。FrooxEngine に依存するロジックは
+    Resonite を実起動しないと真に検証できないため、ここでは純粋な型・状態機械・
+    proto 変換の検証に絞る。Resonite 本体を含む E2E は mod/tests/manual/ に
+    Markdown 手順書として残す方針。
+
+    本プロジェクトは Microsoft.NET.Sdk 直接 (= Remora.Resonite.Sdk を使わない)。
+    テストは BepInEx ランタイム上で動かさないため Resonite 参照アセンブリを
+    引き込む必要がない。代わりに ProjectReference で本体プロジェクトを参照する。
+
+    ImplicitUsings=disable: 本体側 (Remora SDK) は implicit usings 有効だが、
+    テストでは型を明示的に import するルール。
+  -->
+
+  <PropertyGroup>
+    <RootNamespace>ResoniteAIBridge.Tests</RootNamespace>
+    <AssemblyName>ResoniteAIBridge.Tests</AssemblyName>
+    <IsPackable>false</IsPackable>
+    <ImplicitUsings>disable</ImplicitUsings>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.NET.Test.Sdk" Version="17.14.1" />
+    <PackageReference Include="xunit" Version="2.9.3" />
+    <PackageReference Include="xunit.runner.visualstudio" Version="3.1.4">
+      <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
+      <PrivateAssets>all</PrivateAssets>
+    </PackageReference>
+    <PackageReference Include="coverlet.collector" Version="6.0.4">
+      <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
+      <PrivateAssets>all</PrivateAssets>
+    </PackageReference>
+    <!--
+      BepInEx assemblies are needed at test runtime because the plugin class
+      inherits BasePlugin. The Remora SDK marks these as Private=false for the
+      mod itself (Resonite already provides them), but tests run outside of
+      Resonite so we copy them locally.
+    -->
+    <PackageReference Include="BepInEx.Core" Version="6.0.0-be.730" />
+    <PackageReference Include="BepInEx.NET.Common" Version="6.0.0-be.730" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\src\ResoniteAIBridge\ResoniteAIBridge.csproj" />
+  </ItemGroup>
+</Project>
