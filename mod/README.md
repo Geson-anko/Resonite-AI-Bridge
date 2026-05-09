@@ -21,8 +21,8 @@ BepisLoader 向けの依存を一括で引き込む。
 dotnet restore                  # NuGet 復元 (NuGet.config の 3 feed を使う)
 dotnet build -c Release         # mod ビルド (proto 生成も走る)
 dotnet test                     # xunit smoke test
-dotnet csharpier check .        # フォーマット検査 (CI モード)
-dotnet csharpier format .       # フォーマットを書き戻す
+csharpier check .               # フォーマット検査 (CI モード)
+csharpier format .              # フォーマットを書き戻す
 ```
 
 リポジトリ全体のタスクは root の `just` レシピを使うこと

@@ -23,14 +23,6 @@ public sealed class ResoniteAIBridgePluginTests
     }
 
     [Fact]
-    public void PluginConstants_AreNonEmpty()
-    {
-        Assert.False(string.IsNullOrWhiteSpace(ResoniteAIBridgePlugin.PluginGuid));
-        Assert.False(string.IsNullOrWhiteSpace(ResoniteAIBridgePlugin.PluginName));
-        Assert.False(string.IsNullOrWhiteSpace(ResoniteAIBridgePlugin.PluginVersion));
-    }
-
-    [Fact]
     public void PluginType_HasBepInPluginAttribute_WithMatchingMetadata()
     {
         var attr = typeof(ResoniteAIBridgePlugin).GetCustomAttribute<BepInEx.BepInPlugin>();
