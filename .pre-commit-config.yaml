@@ -1,0 +1,136 @@
+default_language_version:
+  python: python3
+
+ci:
+  autoupdate_commit_msg: "chore: update pre-commit hooks"
+  autofix_commit_msg: "style: pre-commit fixes"
+
+repos:
+  # ===== Basic file checks and formatting =====
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v5.0.0
+    hooks:
+      - id: trailing-whitespace
+      - id: end-of-file-fixer
+      - id: check-docstring-first
+      - id: check-yaml
+      - id: check-toml
+      - id: debug-statements
+      - id: detect-private-key
+      - id: check-executables-have-shebangs
+      - id: check-case-conflict
+      - id: check-added-large-files
+      - id: check-merge-conflict
+      - id: check-symlinks
+      - id: mixed-line-ending
+      - id: requirements-txt-fixer
+
+  # ===== Python =====
+  # uv lockfile freshness
+  - repo: https://github.com/astral-sh/uv-pre-commit
+    rev: 0.7.20
+    hooks:
+      - id: uv-lock
+
+  # ruff: scripts/setup.sh で uv が入っている前提で `uvx ruff` 経由で実行する。
+  # 公式 ruff-pre-commit を使わず local hook にしているのは、開発環境と CI で
+  # 同じ ruff バージョン解決を uv に一本化するため。
+  - repo: local
+    hooks:
+      - id: ruff-check
+        name: ruff check
+        entry: uvx ruff check --fix
+        language: system
+        types_or: [python, pyi]
+        require_serial: true
+      - id: ruff-format
+        name: ruff format
+        entry: uvx ruff format
+        language: system
+        types_or: [python, pyi]
+        require_serial: true
+
+  # Python syntax upgrading
+  - repo: https://github.com/asottile/pyupgrade
+    rev: v3.19.0
+    hooks:
+      - id: pyupgrade
+        args: [--py312-plus] # Target Python 3.12+
+
+  # Python docstring formatting
+  - repo: https://github.com/PyCQA/docformatter
+    rev: 06907d0267368b49b9180eed423fae5697c1e909 # fix after v1.7.5
+    hooks:
+      - id: docformatter
+        args: [--in-place, --wrap-summaries=79, --wrap-descriptions=72]
+
+  # Python pygrep checks
+  - repo: https://github.com/pre-commit/pygrep-hooks
+    rev: v1.10.0
+    hooks:
+      - id: python-check-blanket-noqa
+      - id: python-check-blanket-type-ignore
+      - id: python-no-log-warn
+      - id: python-use-type-annotations
+      - id: rst-backticks
+      - id: rst-directive-colons
+      - id: rst-inline-touching-normal
+
+  # ===== Markdown =====
+  - repo: https://github.com/executablebooks/mdformat
+    rev: 0.7.18
+    hooks:
+      - id: mdformat
+        args: ["--number"]
+        additional_dependencies:
+          - mdformat-gfm
+          - mdformat-tables
+          - mdformat_frontmatter
+
+  # ===== Spell checking =====
+  - repo: https://github.com/codespell-project/codespell
+    rev: v2.3.0
+    hooks:
+      - id: codespell
+        args:
+          - --skip=*.ipynb**
+
+  # ===== C# =====
+  # csharpier は scripts/setup.sh で `dotnet tool install -g csharpier` 済み前提。
+  # `dotnet csharpier format` で変更ファイルだけを in-place 整形する。
+  - repo: local
+    hooks:
+      - id: csharpier
+        name: csharpier
+        entry: dotnet csharpier format
+        language: system
+        types_or: [c#]
+        pass_filenames: true
+
+  # ===== Shell =====
+  # shellcheck: 静的解析 (バグ検出)
+  - repo: https://github.com/shellcheck-py/shellcheck-py
+    rev: v0.11.0.1
+    hooks:
+      - id: shellcheck
+
+  # shfmt: フォーマッタ
+  #   -w   in-place 書き換え
+  #   -i 2 2-space indent
+  #   -ci  case 文を 1 段 indent
+  #   -bn  binary op を行頭側に
+  - repo: https://github.com/scop/pre-commit-shfmt
+    rev: v3.12.0-2
+    hooks:
+      - id: shfmt
+        args: [-w, -i, "2", -ci, -bn]
+
+  # ===== Protobuf =====
+  # bufbuild/buf の hooks は language: golang なので buf binary は pre-commit が
+  # 自動 install する (setup.sh への追加不要)。buf-breaking はベースライン参照が
+  # 必要なため CI 側で別途実行する想定で、ここでは入れない。
+  - repo: https://github.com/bufbuild/buf
+    rev: v1.69.0
+    hooks:
+      - id: buf-lint
+      - id: buf-format
