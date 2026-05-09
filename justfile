@@ -1,12 +1,5 @@
 set dotenv-load := true
 set shell := ["bash", "-c"]
-set export := true
-
-# .NET global tools (csharpier 等) が PATH に載るよう DOTNET_ROOT/PATH を justfile 側で確実に解決する。
-# scripts/setup.sh が ~/.bashrc に追加するエントリは新規シェルで効くが、`just` は子シェルなので
-# 改めてここで上書きする。
-DOTNET_ROOT := env("DOTNET_ROOT", home_directory() + "/.dotnet")
-PATH := DOTNET_ROOT + "/tools:" + env("PATH")
 
 # 既定で help を出す。
 default:
@@ -36,7 +29,7 @@ py-type:
 # ===== C# (mod/) ========================================================
 
 mod-format:
-    cd mod && csharpier format .
+    cd mod && dotnet csharpier format .
 
 mod-build:
     cd mod && dotnet build -c Release
