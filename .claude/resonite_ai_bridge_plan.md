@@ -31,7 +31,7 @@
 - 通信データ型は **pyright strict** をクリアする型付け
 - 各モダリティが他のモダリティに依存しない (片方だけ使う構成も可能)
 
----
+______________________________________________________________________
 
 ## 2. アーキテクチャ概要
 
@@ -59,12 +59,12 @@
 
 ### モダリティ別の実装方針
 
-| モダリティ | 取得方法 (C# 側) | 通信パターン |
-|---|---|---|
-| Camera | `Camera` コンポーネント → `RenderTextureProvider` → byte[] | server-stream |
-| Audio | (要調査: FrooxEngine の Audio Output / Mic 経路) | bidi-stream |
-| Locomotion | `LocalUser.Root` 直接駆動 (Position/Rotation) | client-stream |
-| Manipulation | Hand Slot Pose 制御 + `Grabber` | client-stream |
+| モダリティ   | 取得方法 (C# 側)                                             | 通信パターン  |
+| ------------ | ------------------------------------------------------------ | ------------- |
+| Camera       | `Camera` コンポーネント → `RenderTextureProvider` → byte\[\] | server-stream |
+| Audio        | (要調査: FrooxEngine の Audio Output / Mic 経路)             | bidi-stream   |
+| Locomotion   | `LocalUser.Root` 直接駆動 (Position/Rotation)                | client-stream |
+| Manipulation | Hand Slot Pose 制御 + `Grabber`                              | client-stream |
 
 ### 同期戦略
 
@@ -77,7 +77,7 @@
 
 各ストリームに **タイムスタンプ** を付与し、必要な同期は受信側 (Python) で行う。
 
----
+______________________________________________________________________
 
 ## 3. Step 0: 開発環境・プロジェクトセットアップ
 
@@ -152,11 +152,11 @@ resonite-ai-bridge/
 
 ### D. ビルド・デプロイサイクル
 
-| スクリプト | 役割 |
-|---|---|
-| `scripts/setup.sh` | 任意の Linux で .NET SDK / protoc / uv / Python deps を一発インストール |
-| `scripts/gen_proto.sh` | `.proto` から C# / Python の両側コードを生成 |
-| `scripts/deploy_mod.sh` | `dotnet build` → `.dll` を Resonite の plugins ディレクトリへ |
+| スクリプト              | 役割                                                                    |
+| ----------------------- | ----------------------------------------------------------------------- |
+| `scripts/setup.sh`      | 任意の Linux で .NET SDK / protoc / uv / Python deps を一発インストール |
+| `scripts/gen_proto.sh`  | `.proto` から C# / Python の両側コードを生成                            |
+| `scripts/deploy_mod.sh` | `dotnet build` → `.dll` を Resonite の plugins ディレクトリへ           |
 
 Python 側は `uv sync` で editable install 含めて完結。
 
@@ -182,13 +182,13 @@ Python 側は `uv sync` で editable install 含めて完結。
 
 - `.proto` 変更後に `gen_proto.sh` を再実行した結果が commit 済み生成物と一致するかチェック
 
----
+______________________________________________________________________
 
 ## 4. 残った論点
 
 すべての論点が解決済み。詳細は `§5 決定事項` を参照。
 
----
+______________________________________________________________________
 
 ## 5. 決定事項
 
@@ -209,7 +209,7 @@ Python 側は `uv sync` で editable install 含めて完結。
 - ✅ **C# Linter/Analyzer**: csharpier + Roslyn analyzers + `Nullable=enable` + `TreatWarningsAsErrors=true` (StyleCop は不採用)
 - ✅ **proto スキーマは Step ごとに incremental に詰める** (Step 1 で `bridge.proto`、Step 3 で `camera.proto`、…)
 
----
+______________________________________________________________________
 
 ## 6. 今後のステップ
 
@@ -227,7 +227,7 @@ Python 側は `uv sync` で editable install 含めて完結。
 ### Step 3: Camera モジュール
 
 - エージェント頭部 Slot に `Camera` コンポーネント生成
-- `RenderTextureProvider` から byte[] を取り出す
+- `RenderTextureProvider` から byte\[\] を取り出す
 - gRPC server-streaming で Python に push
 - Python 側で `cv2.imshow` 目視確認 ← **最初の難関**
 
@@ -251,7 +251,7 @@ Python 側は `uv sync` で editable install 含めて完結。
 - Crystite 方式の独自ホスト検討
 - 軽量レンダラへの置き換え (PJB blog 参照)
 
----
+______________________________________________________________________
 
 ## 7. リスク・未解決事項
 
@@ -260,7 +260,7 @@ Python 側は `uv sync` で editable install 含めて完結。
 - **ライセンス・ToS**: Resonite は明示的な研究用 bot 規定なし。慣習的には黙認〜歓迎
 - **マルチエージェント**: スコープ外だが、将来は 1 Resonite インスタンス = 1 エージェントのコスト問題が出てくる
 
----
+______________________________________________________________________
 
 ## 8. 参考リンク
 

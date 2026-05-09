@@ -22,6 +22,7 @@ set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 SCRIPT_NAME="setup"
+# shellcheck source-path=SCRIPTDIR
 # shellcheck source=lib.sh
 source "$SCRIPT_DIR/lib.sh"
 
@@ -141,8 +142,8 @@ install_protoc() {
   fi
   local arch
   case "$(uname -m)" in
-    x86_64)         arch="x86_64" ;;
-    aarch64|arm64)  arch="aarch_64" ;;
+    x86_64) arch="x86_64" ;;
+    aarch64 | arm64) arch="aarch_64" ;;
     *) die "Unsupported architecture for protoc binary: $(uname -m)" ;;
   esac
   log "Installing protoc ${PROTOC_VERSION} (linux-${arch}) into ${PROTOC_INSTALL_DIR}..."
