@@ -1,4 +1,5 @@
 # scripts/lib.sh
+# shellcheck shell=bash
 #
 # resonite-ai-bridge の shell scripts で共有する汎用ユーティリティ。
 # 各 script はファイル先頭で:
@@ -22,9 +23,12 @@ fi
 
 # ===== Logging ===============================================================
 # `SCRIPT_NAME` が呼び出し側で設定されていればプレフィクスに使う。未設定なら "script"。
-log()  { printf '\n\033[1;36m[%s]\033[0m %s\n' "${SCRIPT_NAME:-script}" "$*"; }
+log() { printf '\n\033[1;36m[%s]\033[0m %s\n' "${SCRIPT_NAME:-script}" "$*"; }
 warn() { printf '\033[1;33m[%s:warn]\033[0m %s\n' "${SCRIPT_NAME:-script}" "$*" >&2; }
-die()  { printf '\033[1;31m[%s:err]\033[0m %s\n' "${SCRIPT_NAME:-script}" "$*" >&2; exit 1; }
+die() {
+  printf '\033[1;31m[%s:err]\033[0m %s\n' "${SCRIPT_NAME:-script}" "$*" >&2
+  exit 1
+}
 
 # ===== Command / OS detection ================================================
 have() { command -v "$1" >/dev/null 2>&1; }
@@ -39,10 +43,10 @@ detect_distro() {
     # shellcheck disable=SC1091
     . /etc/os-release
     case " ${ID_LIKE:-} ${ID:-} " in
-      *' debian '*|*' ubuntu '*) echo debian ;;
-      *' fedora '*|*' rhel '*|*' centos '*) echo fedora ;;
+      *' debian '* | *' ubuntu '*) echo debian ;;
+      *' fedora '* | *' rhel '* | *' centos '*) echo fedora ;;
       *' arch '*) echo arch ;;
-      *' suse '*|*' opensuse '*) echo suse ;;
+      *' suse '* | *' opensuse '*) echo suse ;;
       *) echo unknown ;;
     esac
   else
@@ -62,13 +66,13 @@ add_to_shell_profile() {
   local line="$1"
   local profile
   case "${SHELL:-}" in
-    */zsh)  profile="$HOME/.zshrc" ;;
+    */zsh) profile="$HOME/.zshrc" ;;
     */bash) profile="$HOME/.bashrc" ;;
-    *)      profile="$HOME/.profile" ;;
+    *) profile="$HOME/.profile" ;;
   esac
   touch "$profile"
   if ! grep -qsF -- "$line" "$profile"; then
-    printf '%s\n' "$line" >> "$profile"
+    printf '%s\n' "$line" >>"$profile"
     log "Added to $profile: $line"
   fi
 }
@@ -78,6 +82,7 @@ ensure_local_bin_on_path() {
   case ":$PATH:" in
     *":$HOME/.local/bin:"*) ;;
     *)
+      # shellcheck disable=SC2016 # rc に literal で書きたいので展開させない
       add_to_shell_profile 'export PATH="$HOME/.local/bin:$PATH"'
       export PATH="$HOME/.local/bin:$PATH"
       ;;

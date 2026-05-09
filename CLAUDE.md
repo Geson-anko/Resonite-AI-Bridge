@@ -86,17 +86,17 @@ C# 側のモジュール構造と Python 側のモジュール構造は **モダ
 
 `just` レシピを使う（`uv run` / `dotnet` / `protoc` をラップ）。具体的な recipe は `justfile` を実装するときに固める想定だが、最低限以下の名前を提供する:
 
-| レシピ            | 役割                                                                                            |
-| ----------------- | ----------------------------------------------------------------------------------------------- |
+| レシピ            | 役割                                                                                             |
+| ----------------- | ------------------------------------------------------------------------------------------------ |
 | `just setup`      | `scripts/setup.sh` を呼んで .NET SDK / protoc / uv / Python deps / pre-commit を一発インストール |
-| `just gen-proto`  | `scripts/gen_proto.sh` で `.proto` から C# / Python の両側コードを生成                          |
-| `just deploy-mod` | `scripts/deploy_mod.sh` で `dotnet build` → `.dll` を Resonite の BepInEx/plugins/ にコピー     |
+| `just gen-proto`  | `scripts/gen_proto.sh` で `.proto` から C# / Python の両側コードを生成                           |
+| `just deploy-mod` | `scripts/deploy_mod.sh` で `dotnet build` → `.dll` を Resonite の BepInEx/plugins/ にコピー      |
 | `just format`     | C# (`csharpier`) と Python (`ruff format` + `ruff check --fix`) を両方走らせる                   |
 | `just test`       | C# (`dotnet test`) と Python (`pytest -v --cov`) を両方走らせる                                  |
 | `just type`       | Python の `pyright` を `python/src/` に対し strict 実行                                          |
 | `just build`      | C# mod を `dotnet build -c Release`                                                              |
 | `just run`        | `format` → `gen-proto` (proto に変更があれば) → `build` → `test` → `type` を直列実行             |
-| `just clean`      | `dist/`、`__pycache__`、`.pytest_cache`、`bin/`、`obj/` 等を削除                                  |
+| `just clean`      | `dist/`、`__pycache__`、`.pytest_cache`、`bin/`、`obj/` 等を削除                                 |
 
 サブコマンド分離が必要な場合の補助レシピ（実装時に追加）:
 

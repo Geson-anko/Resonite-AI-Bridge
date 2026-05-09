@@ -108,11 +108,12 @@ repos:
         pass_filenames: true
 
   # ===== Shell =====
-  # shellcheck: 静的解析 (バグ検出)
+  # shellcheck: 静的解析 (バグ検出)。-x で source 先 (lib.sh) も follow
   - repo: https://github.com/shellcheck-py/shellcheck-py
     rev: v0.11.0.1
     hooks:
       - id: shellcheck
+        args: [-x]
 
   # shfmt: フォーマッタ
   #   -w   in-place 書き換え
