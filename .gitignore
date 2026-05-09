@@ -1,0 +1,171 @@
+# =============================================================================
+# Python
+# =============================================================================
+
+# Byte-compiled / optimized
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+
+# Distribution / packaging
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+share/python-wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+MANIFEST
+
+# uv
+# `python/uv.lock` は commit するので除外しない (lock を commit する方針)
+.venv/
+venv/
+env/
+ENV/
+
+# Type checkers / linters / test runners
+.pytest_cache/
+.mypy_cache/
+.pyright/
+.ruff_cache/
+.tox/
+.nox/
+.cache/
+.hypothesis/
+
+# Coverage
+.coverage
+.coverage.*
+htmlcov/
+coverage.xml
+*.cover
+
+# Jupyter / IPython
+.ipynb_checkpoints
+profile_default/
+ipython_config.py
+
+# pyenv
+.python-version
+
+# =============================================================================
+# C# / .NET
+# =============================================================================
+
+# Build outputs
+[Bb]in/
+[Oo]bj/
+[Oo]ut/
+[Ll]og/
+[Ll]ogs/
+[Dd]ebug/
+[Dd]ebugPublic/
+[Rr]elease/
+[Rr]eleases/
+x64/
+x86/
+[Ww][Ii][Nn]32/
+[Aa][Rr][Mm]/
+[Aa][Rr][Mm]64/
+bld/
+
+# Visual Studio / Rider / VSCode user state
+.vs/
+.vscode/*
+!.vscode/settings.json
+!.vscode/tasks.json
+!.vscode/launch.json
+!.vscode/extensions.json
+.idea/
+*.user
+*.suo
+*.userprefs
+*.userosscache
+*.sln.docstates
+
+# .NET tooling
+.dotnet/
+project.lock.json
+project.fragment.lock.json
+artifacts/
+
+# Test results
+[Tt]est[Rr]esult*/
+[Bb]uild[Ll]og.*
+*.VisualState.xml
+TestResult.xml
+nunit-*.xml
+
+# Roslyn cache / build artifacts
+*.tlog
+*.lastbuildstate
+*.cache
+*.ilk
+*.iobj
+*.ipdb
+*.meta
+*_i.c
+*_p.c
+*_h.h
+
+# NuGet
+*.nupkg
+*.snupkg
+**/[Pp]ackages/*
+!**/[Pp]ackages/build/
+*.nuget.props
+*.nuget.targets
+
+# Compiled binaries (mod artifacts deploy 経由で配布する想定)
+*.dll
+*.pdb
+*.exe
+
+# =============================================================================
+# Protobuf
+# =============================================================================
+
+# Python 側の protoc 出力は意図的に commit する (plan §3.C)
+# `python/src/resobridge/_generated/` は ignore せず
+#
+# C# 側は csproj の <Protobuf> ItemGroup から build 時生成される (obj/ に出る) ため
+# obj/ の ignore でカバーされる
+
+# =============================================================================
+# Environment / secrets
+# =============================================================================
+
+.env
+.env.*
+!.env.example
+
+# =============================================================================
+# OS noise
+# =============================================================================
+
+.DS_Store
+Thumbs.db
+ehthumbs.db
+Desktop.ini
+$RECYCLE.BIN/
+
+# =============================================================================
+# Local artifacts
+# =============================================================================
+
+*.log
+*.tmp
+*.swp
+*~
