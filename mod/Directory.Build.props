@@ -1,0 +1,22 @@
+<Project>
+  <!--
+    ソリューション全体に効く共通プロパティ。
+
+    - TargetFramework: .NET 10 (Resonite/FrooxEngine が要求する CoreCLR 系列)
+    - Nullable: enable + TreatWarningsAsErrors で null 安全性を強制
+    - EnableNETAnalyzers / AnalysisLevel=latest で Roslyn analyzer を有効化
+    - GenerateDocumentationFile=false: Remora.Resonite.Sdk が生成する PluginMetadata.cs
+      に XML コメントが付かないため、CS1591 を warning で抑える代わりにそもそも
+      ドキュメント生成を切る。skeleton 段階では public API は安定していない。
+  -->
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <LangVersion>latest</LangVersion>
+    <Nullable>enable</Nullable>
+    <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
+    <EnableNETAnalyzers>true</EnableNETAnalyzers>
+    <AnalysisLevel>latest</AnalysisLevel>
+    <GenerateDocumentationFile>false</GenerateDocumentationFile>
+  </PropertyGroup>
+</Project>
