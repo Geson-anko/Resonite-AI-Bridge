@@ -20,7 +20,10 @@ source "$SCRIPT_DIR/lib.sh"
 
 REPO_ROOT="$(repo_root)"
 MOD_PROJECT_DIR="$REPO_ROOT/mod/src/ResoniteAIBridge"
-DLL_RELATIVE="bin/Release/net10.0/ResoniteAIBridge.dll"
+# Remora.Resonite.Sdk は build 出力を `bin/<Configuration>/mod/client/BepInEx/plugins/<AssemblyName>/`
+# 配下に再配置する。TFM ディレクトリ (net10.0) には素の dll が出ない点に注意。
+BUILD_OUTPUT_GLOB_DIR="$MOD_PROJECT_DIR/bin/Release"
+DLL_NAME="ResoniteAIBridge.dll"
 
 main() {
   if [[ -z "${RESONITE_PLUGIN_DIR:-}" ]]; then
@@ -35,21 +38,26 @@ main() {
     die "mod project directory not found: $MOD_PROJECT_DIR (mod skeleton not yet created?)"
   fi
 
-  local dll_path="$MOD_PROJECT_DIR/$DLL_RELATIVE"
+  # Remora SDK の出力配置を find で探す。`*/plugins/*` で絞り込み、TFM の差や
+  # 将来の出力先変更に追随する。
+  local dll_path
+  dll_path="$(find "$BUILD_OUTPUT_GLOB_DIR" -type f -name "$DLL_NAME" -path '*/plugins/*' 2>/dev/null | head -n 1 || true)"
 
-  if [[ ! -f "$dll_path" ]]; then
-    log "DLL not found at $dll_path; running 'dotnet build -c Release' first."
+  if [[ -z "$dll_path" ]]; then
+    log "DLL not found under $BUILD_OUTPUT_GLOB_DIR; running 'dotnet build -c Release' first."
     have dotnet || die "dotnet SDK is required but not installed. Run scripts/setup.sh first."
     (cd "$MOD_PROJECT_DIR" && dotnet build -c Release)
+    dll_path="$(find "$BUILD_OUTPUT_GLOB_DIR" -type f -name "$DLL_NAME" -path '*/plugins/*' 2>/dev/null | head -n 1 || true)"
   fi
 
-  if [[ ! -f "$dll_path" ]]; then
-    die "Build completed but DLL still missing: $dll_path"
+  if [[ -z "$dll_path" || ! -f "$dll_path" ]]; then
+    die "Build completed but DLL still missing under $BUILD_OUTPUT_GLOB_DIR (expected '*/plugins/$DLL_NAME')."
   fi
 
-  log "Copying $dll_path -> $RESONITE_PLUGIN_DIR/"
+  log "Resolved DLL: $dll_path"
+  log "Copying -> $RESONITE_PLUGIN_DIR/"
   cp -f "$dll_path" "$RESONITE_PLUGIN_DIR/"
-  log "Deployed ResoniteAIBridge.dll to $RESONITE_PLUGIN_DIR"
+  log "Deployed $DLL_NAME to $RESONITE_PLUGIN_DIR"
 }
 
 main "$@"
