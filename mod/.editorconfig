@@ -1,0 +1,44 @@
+# EditorConfig: C# のフォーマットと Roslyn analyzer 重大度を定義する。
+# csharpier (printWidth=100, tabWidth=4, useTabs=false, eol=lf) と整合させる。
+
+root = true
+
+[*]
+charset = utf-8
+end_of_line = lf
+insert_final_newline = true
+trim_trailing_whitespace = true
+indent_style = space
+indent_size = 4
+
+[*.{cs,csproj,props,targets}]
+indent_size = 4
+
+[*.{json,yml,yaml}]
+indent_size = 2
+
+[*.cs]
+# C# style preferences (csharpier がほぼすべて再フォーマットするので最小限)
+csharp_indent_case_contents = true
+csharp_indent_switch_labels = true
+csharp_new_line_before_open_brace = all
+csharp_new_line_before_else = true
+csharp_new_line_before_catch = true
+csharp_new_line_before_finally = true
+
+# Naming and language preferences
+dotnet_style_qualification_for_field = false:warning
+dotnet_style_qualification_for_property = false:warning
+dotnet_style_qualification_for_method = false:warning
+dotnet_style_qualification_for_event = false:warning
+csharp_style_var_for_built_in_types = true:suggestion
+csharp_style_var_when_type_is_apparent = true:suggestion
+csharp_style_var_elsewhere = true:suggestion
+
+# Roslyn analyzer 重大度: skeleton 段階の品質ゲート
+# (StyleCop は採用しないので、CA 系のみ調整する)
+dotnet_diagnostic.CA1014.severity = none      # CLSCompliant 属性は不要 (mod は外部公開しない)
+dotnet_diagnostic.CA1707.severity = none      # generated proto 型に underscore があるため
+dotnet_diagnostic.CA1812.severity = none      # BasePlugin の派生は外部から参照されない
+dotnet_diagnostic.CA2007.severity = none      # ConfigureAwait(false) は mod 文脈では不要
+dotnet_diagnostic.CS1591.severity = none      # XML コメント未記載 (skeleton では緩める)

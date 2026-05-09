@@ -121,8 +121,10 @@ install_dotnet() {
   "$installer" --channel "$DOTNET_CHANNEL" --install-dir "$DOTNET_INSTALL_DIR"
   rm -f "$installer"
 
+  # `$DOTNET_INSTALL_DIR` は install-time に展開して rc に書き、`$PATH` のみ
+  # 起動時展開させる ($DOTNET_INSTALL_DIR は呼び出し側 shell で必ず set されているとは限らないため)。
   add_to_shell_profile "export DOTNET_ROOT=\"$DOTNET_INSTALL_DIR\""
-  add_to_shell_profile "export PATH=\"$DOTNET_INSTALL_DIR:\$DOTNET_INSTALL_DIR/tools:\$PATH\""
+  add_to_shell_profile "export PATH=\"$DOTNET_INSTALL_DIR:$DOTNET_INSTALL_DIR/tools:\$PATH\""
 
   export DOTNET_ROOT="$DOTNET_INSTALL_DIR"
   export PATH="$DOTNET_INSTALL_DIR:$DOTNET_INSTALL_DIR/tools:$PATH"
@@ -159,14 +161,17 @@ install_protoc() {
   log "protoc installed: $(protoc --version)"
 }
 
-# ===== 6. csharpier (.NET global tool) =======================================
-install_csharpier() {
-  if dotnet tool list -g 2>/dev/null | awk '{print tolower($1)}' | grep -q '^csharpier$'; then
-    log "csharpier already installed."
+# ===== 6. dotnet local tools (csharpier ほか) =================================
+# csharpier はリポジトリ内 `.config/dotnet-tools.json` に local tool として固定
+# されている。`dotnet tool restore` が manifest を読んで `.dotnet/toolResolverCache`
+# 経由で解決するため、global tools (`-g`) や PATH 操作は不要。
+restore_dotnet_tools() {
+  if [[ ! -f "$REPO_ROOT/.config/dotnet-tools.json" ]]; then
+    log ".config/dotnet-tools.json not present; skipping local tool restore."
     return
   fi
-  log "Installing csharpier as global .NET tool..."
-  dotnet tool install -g csharpier
+  log "Restoring .NET local tools from .config/dotnet-tools.json..."
+  (cd "$REPO_ROOT" && dotnet tool restore)
 }
 
 # ===== 7. pre-commit (uv tool) ===============================================
@@ -208,7 +213,7 @@ main() {
   install_just
   install_dotnet
   install_protoc
-  install_csharpier
+  restore_dotnet_tools
   install_pre_commit
   sync_python_project
 

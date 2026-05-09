@@ -1,0 +1,14 @@
+version: v2
+modules:
+  - path: proto
+lint:
+  use:
+    - DEFAULT
+  # SERVICE_SUFFIX は service 名に "Service" 接尾辞を要求するが、本プロジェクトでは
+  # `Bridge` / `Camera` / `Locomotion` といったモダリティ名そのものを service 名に
+  # 採用する方針 (Plan §2.1) のため除外する。
+  except:
+    - SERVICE_SUFFIX
+breaking:
+  use:
+    - FILE

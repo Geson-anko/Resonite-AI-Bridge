@@ -1,0 +1,53 @@
+<Project Sdk="Remora.Resonite.Sdk/2.1.0">
+  <!--
+    ResoniteAIBridge mod プロジェクト。
+
+    Remora.Resonite.Sdk (MSBuild SDK) を採用。Sdk が以下を自動で行う:
+      - .NET 10 ターゲット設定
+      - Resonite/FrooxEngine の publicized 参照アセンブリの解決
+      - BepisLoader 向け依存 (BepInEx.NET.Common.BasePlugin, ResonitePluginInfoProps,
+        BepInExResoniteShim, BepisResoniteWrapper) の自動 PackageReference
+      - 出力先を BepInEx/plugins/<AssemblyName>/ に整える
+
+    BepInEx.Core / Remora.Resonite.Sdk / BepInEx.NET.Common などの正確な
+    バージョンは Sdk が解決する (Mod.BepisLoader.targets の `3.*` `0.9.*` `1.*`
+    レンジを採用)。本プロジェクトでは個別に PackageReference しない。
+
+    proto コード生成は Grpc.Tools の <Protobuf> ItemGroup で build-time に行う。
+    生成された C# は obj/ 配下に出力されるため commit 不要 (CLAUDE.md / plan
+    §3.E と整合)。
+  -->
+
+  <PropertyGroup>
+    <RootNamespace>ResoniteAIBridge</RootNamespace>
+    <AssemblyName>ResoniteAIBridge</AssemblyName>
+
+    <!-- Remora SDK プロパティ: Resonite クライアント (FrooxEngine + Renderite)
+         向けの BepisLoader mod として組み立てる -->
+    <ResoniteTarget>client</ResoniteTarget>
+    <ResoniteProjectType>mod</ResoniteProjectType>
+    <ResoniteTargetModLoader>BepisLoader</ResoniteTargetModLoader>
+
+    <!-- ローカルに Resonite が無い CI / 開発機でも build を通すため、
+         実インストールではなく SDK 同梱の publicized 参照アセンブリを強制 -->
+    <ResoniteForceReferenceAssemblies>true</ResoniteForceReferenceAssemblies>
+  </PropertyGroup>
+
+  <!-- proto から C# を build-time に生成 (Server スタブのみ; mod 側は server 役) -->
+  <ItemGroup>
+    <Protobuf
+      Include="..\..\..\proto\resonite_ai_bridge\v1\*.proto"
+      ProtoRoot="..\..\..\proto"
+      GrpcServices="Server"
+    />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Google.Protobuf" Version="3.30.0" />
+    <PackageReference Include="Grpc.Tools" Version="2.71.0">
+      <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
+      <PrivateAssets>all</PrivateAssets>
+    </PackageReference>
+    <PackageReference Include="Grpc.Net.Client" Version="2.71.0" />
+  </ItemGroup>
+</Project>

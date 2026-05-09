@@ -63,6 +63,10 @@ repos:
     hooks:
       - id: docformatter
         args: [--in-place, --wrap-summaries=79, --wrap-descriptions=72]
+        # protoc-gen-python_betterproto2 の出力 (commit 対象) を素通しする。
+        # docformatter で書き換えると次回 just gen-proto 実行時に diff が
+        # 戻り、CI の "再生成 diff チェック" を壊すため。
+        exclude: ^python/src/resobridge/_generated/
 
   # Python pygrep checks
   - repo: https://github.com/pre-commit/pygrep-hooks
@@ -96,8 +100,9 @@ repos:
           - --skip=*.ipynb**
 
   # ===== C# =====
-  # csharpier は scripts/setup.sh で `dotnet tool install -g csharpier` 済み前提。
-  # `dotnet csharpier format` で変更ファイルだけを in-place 整形する。
+  # csharpier は `.config/dotnet-tools.json` の **local tool** として管理。
+  # `scripts/setup.sh` が `dotnet tool restore` で解決する。`dotnet csharpier`
+  # で manifest 経由に呼び出されるため、`~/.dotnet/tools/` を PATH に通す必要は無い。
   - repo: local
     hooks:
       - id: csharpier
