@@ -66,21 +66,24 @@ main() {
   rm -rf "$PYTHON_OUT"
   mkdir -p "$PYTHON_OUT"
 
-  # generated パッケージは Python パッケージとしてマーカーが必要。
-  # pyright を strict で読ませるため、自動生成領域全体を py.typed にする。
-  : >"$PYTHON_OUT/__init__.py"
-  : >"$PYTHON_OUT/py.typed"
-
+  # `betterproto2_compiler` は pyproject.toml の dev グループに固定済み。
+  # extra `[compiler]` は betterproto2 にはなく、独立 distribution として
+  # 配布されているため `--with` での解決は使わない。
   log "Running protoc with python_betterproto2 plugin (server_generation=async)..."
   (
     cd "$PYTHON_PROJECT"
-    uv run --with 'betterproto2[compiler]' -- \
+    uv run -- \
       protoc \
       -I "$PROTO_DIR" \
       --python_betterproto2_out="$PYTHON_OUT" \
       --python_betterproto2_opt=server_generation=async \
       "${proto_files[@]}"
   )
+
+  # protoc 後に package marker を補完 (生成ツールが触らないファイルのみ作る)。
+  # protoc が `__init__.py` を作る場合は上書きしない。
+  [[ -f "$PYTHON_OUT/__init__.py" ]] || : >"$PYTHON_OUT/__init__.py"
+  [[ -f "$PYTHON_OUT/py.typed" ]] || : >"$PYTHON_OUT/py.typed"
 
   log "Python code generated under: $PYTHON_OUT"
 }
