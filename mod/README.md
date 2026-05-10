@@ -1,4 +1,4 @@
-# mod/ — ResoniteAIBridge (C# / BepisLoader)
+# mod/ — ResoniteIO (C# / BepisLoader)
 
 Resonite クライアントに読み込まれる C# Mod。BepInEx 6 系列の `BepisLoader` を
 ターゲットにし、`Remora.Resonite.Sdk` 2.1.0 が FrooxEngine 参照アセンブリと
@@ -6,10 +6,10 @@ BepisLoader 向けの依存を一括で引き込む。
 
 ## 構成
 
-- `src/ResoniteAIBridge/` — 本体プロジェクト (`ResoniteAIBridge.dll`)
-  - モダリティ別フォルダ (`Bridge/`, `Camera/`, `Audio/`, `Locomotion/`,
-    `Manipulation/`) は Python 側 `src/resobridge/` とミラーリングする
-- `tests/ResoniteAIBridge.Tests/` — xunit ユニットテスト
+- `src/ResoniteIO/` — 本体プロジェクト (`ResoniteIO.dll`)
+  - モダリティ別フォルダ (`Session/`, `Camera/`, `Audio/`, `Locomotion/`,
+    `Manipulation/`) は Python 側 `src/resoio/` とミラーリングする
+- `tests/ResoniteIO.Tests/` — xunit ユニットテスト
 - `proto/` のスキーマは build 時に `Grpc.Tools` が `obj/` に C# を生成する
   (commit 不要)
 

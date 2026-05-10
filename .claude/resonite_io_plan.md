@@ -1,8 +1,8 @@
-# Resonite AI Bridge 実装計画
+# Resonite IO 実装計画
 
 ## 1. プロジェクト概要
 
-**Resonite AI Bridge** は、Resonite を AI エージェントの実行環境として利用するための双方向 IPC ブリッジ。
+**Resonite IO** は、Resonite を AI エージェントの実行環境として利用するための双方向 IPC ブリッジ。
 
 設計思想は **強化学習的な抽象化ではなく、リアルタイムロボティクス的な設計**。`Observation/Action` の抽象レイヤーは持たず、`Camera` / `Audio` / `Locomotion` といったモダリティごとに独立した機能を提供する。RL の `step()` 同期はスコープ外で、強化学習インターフェイスは Python 側ライブラリで上に構築されるべきもの。
 
@@ -38,12 +38,12 @@ ______________________________________________________________________
 ```
             [Python Process]                    [Resonite Process]
    ┌────────────────────────────┐    ┌────────────────────────────────┐
-   │  resobridge (Python pkg)   │    │  ResoniteAIBridge (BepisLoader │
+   │  resoio (Python pkg)       │    │  ResoniteIO (BepisLoader mod)  │
    │   ├ Camera client          │    │   ├ Camera                     │
    │   ├ Audio client           │    │   ├ Audio                      │
    │   ├ Locomotion client      │←──→│   ├ Locomotion                 │
    │   ├ Manipulation client    │UDS │   ├ Manipulation               │
-   │   └ Bridge (gRPC base)     │gRPC│   └ Bridge (gRPC server)       │
+   │   └ Session (gRPC base)    │gRPC│   └ Session (gRPC server)      │
    └────────────────────────────┘    └─────────in-process─────────────┘
                                                     │
                                               [FrooxEngine]
@@ -102,36 +102,36 @@ ______________________________________________________________________
 
 ### C. モノレポ構造
 
-- **リポジトリ名**: `resonite-ai-bridge`
-- **C# Mod アセンブリ名**: `ResoniteAIBridge`
-- **Python パッケージ名**: `resobridge`
+- **リポジトリ名**: `resonite-io`
+- **C# Mod アセンブリ名**: `ResoniteIO`
+- **Python パッケージ名**: `resoio`
 
 ```
-resonite-ai-bridge/
+resonite-io/
 ├── proto/                         # 単一の真実: .proto 定義
-│   └── resonite_ai_bridge/v1/
-│       ├── bridge.proto           # セッション管理・ヘルスチェック
+│   └── resonite_io/v1/
+│       ├── session.proto          # セッション管理・ヘルスチェック
 │       ├── camera.proto
 │       ├── audio.proto
 │       ├── locomotion.proto
 │       └── manipulation.proto
 │
 ├── mod/                           # C# 側 (BepisLoader mod)
-│   ├── ResoniteAIBridge.sln
-│   ├── src/ResoniteAIBridge/
-│   │   ├── ResoniteAIBridge.csproj
-│   │   ├── Bridge/                # gRPC server 起点・セッション管理
-│   │   ├── Camera/                # RGB フレーム取得・配信
-│   │   ├── Audio/                 # 音声入出力
-│   │   ├── Locomotion/            # LocalUser 駆動
-│   │   └── Manipulation/          # Hand / Grabber 制御
+│   ├── ResoniteIO.sln
+│   ├── src/ResoniteIO/
+│   │   ├── ResoniteIO.csproj
+│   │   ├── Session/                # gRPC server 起点・セッション管理
+│   │   ├── Camera/                 # RGB フレーム取得・配信
+│   │   ├── Audio/                  # 音声入出力
+│   │   ├── Locomotion/             # LocalUser 駆動
+│   │   └── Manipulation/           # Hand / Grabber 制御
 │   └── tests/
 │
 ├── python/                        # Python 側
 │   ├── pyproject.toml
-│   ├── src/resobridge/
+│   ├── src/resoio/
 │   │   ├── __init__.py
-│   │   ├── bridge.py              # gRPC channel 共有・接続管理
+│   │   ├── session.py             # gRPC channel 共有・接続管理
 │   │   ├── camera.py              # ← C# Camera をミラー
 │   │   ├── audio.py               # ← C# Audio をミラー
 │   │   ├── locomotion.py          # ← C# Locomotion をミラー
@@ -193,7 +193,7 @@ ______________________________________________________________________
 ## 5. 決定事項
 
 - ✅ モノレポ (GitHub 単一リポジトリ)
-- ✅ リポジトリ名 `resonite-ai-bridge` / C# Mod `ResoniteAIBridge` / **Python pkg `resobridge`**
+- ✅ リポジトリ名 `resonite-io` / C# Mod `ResoniteIO` / **Python pkg `resoio`**
 - ✅ Python パッケージマネージャ: `uv`
 - ✅ IPC: gRPC over Unix Domain Socket
 - ✅ Python gRPC スタック: `betterproto2` + `grpclib` (async)
@@ -207,7 +207,8 @@ ______________________________________________________________________
 - ✅ `setup.sh` は Linux ディストロ非依存 (公式バイナリインストーラ優先)
 - ✅ 補助ツール: ライセンス MIT、formatter (csharpier / ruff)、type-check (pyright strict)、test (xunit / pytest)
 - ✅ **C# Linter/Analyzer**: csharpier + Roslyn analyzers + `Nullable=enable` + `TreatWarningsAsErrors=true` (StyleCop は不採用)
-- ✅ **proto スキーマは Step ごとに incremental に詰める** (Step 1 で `bridge.proto`、Step 3 で `camera.proto`、…)
+- ✅ **proto スキーマは Step ごとに incremental に詰める** (Step 1 で `session.proto`、Step 3 で `camera.proto`、…)
+- ✅ **BepInEx PluginGuid**: `net.mlshukai.resonite-io`
 
 ______________________________________________________________________
 
@@ -218,10 +219,10 @@ ______________________________________________________________________
 - BepisLoader mod として最小構成で起動確認
 - `Engine.Current.WorldManager.FocusedWorld` から `LocalUser` を引いて Console にログ出力
 
-### Step 2: gRPC Bridge
+### Step 2: gRPC Session
 
 - C# 側で gRPC サーバ起動 (UDS bind)、別スレッドで動作
-- Python 側から `Bridge.Ping` RPC が通ることを確認
+- Python 側から `Session.Ping` RPC が通ることを確認
 - セッション管理 (接続/切断)
 
 ### Step 3: Camera モジュール

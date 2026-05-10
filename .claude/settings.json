@@ -38,6 +38,7 @@
       "Bash(git restore *)",
       "Bash(git check-ignore *)",
       "Bash(git mv *)",
+      "Bash(git rm *)",
 
       "Bash(just:*)",
 
@@ -50,7 +51,7 @@
       "Bash(uv lock:*)",
       "Bash(uv venv:*)",
       "Bash(uv build *)",
-      "Bash(uv run resobridge:*)",
+      "Bash(uv run resoio:*)",
       "Bash(uv run python:*)",
       "Bash(uv run python3:*)",
       "Bash(uv run pyright:*)",

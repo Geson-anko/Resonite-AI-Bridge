@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # scripts/setup.sh
 #
-# resonite-ai-bridge の開発環境を「任意の Linux ディストリ」で一発構築するスクリプト。
+# resonite-io の開発環境を「任意の Linux ディストリ」で一発構築するスクリプト。
 # 公式バイナリインストーラを優先し、ディストロ依存のパッケージマネージャは
 # git / curl / unzip など最低限のシステム前提のみに留める。
 #
@@ -205,7 +205,7 @@ sync_python_project() {
 # ===== Main ==================================================================
 main() {
   require_linux
-  log "Setting up resonite-ai-bridge dev environment."
+  log "Setting up resonite-io dev environment."
   log "Repo root: $REPO_ROOT"
 
   install_system_prereqs

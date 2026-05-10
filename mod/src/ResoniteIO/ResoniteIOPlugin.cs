@@ -1,7 +1,7 @@
 using BepInEx;
 using BepInEx.NET.Common;
 
-namespace ResoniteAIBridge;
+namespace ResoniteIO;
 
 /// <summary>
 /// BepisLoader 経由で Resonite クライアントに読み込まれる mod のエントリポイント。
@@ -13,15 +13,15 @@ namespace ResoniteAIBridge;
 /// 派生にしているのは BepInEx 6 の慣習に従うため。
 /// </remarks>
 [BepInPlugin(PluginGuid, PluginName, PluginVersion)]
-public sealed class ResoniteAIBridgePlugin : BasePlugin
+public sealed class ResoniteIOPlugin : BasePlugin
 {
     /// <summary>
     /// BepInEx に通知する一意なプラグイン識別子。逆 DNS 形式で衝突を避ける。
     /// </summary>
-    public const string PluginGuid = "net.gop.resonite-ai-bridge";
+    public const string PluginGuid = "net.mlshukai.resonite-io";
 
     /// <summary>BepInEx ログ等で表示される人間可読のプラグイン名。</summary>
-    public const string PluginName = "ResoniteAIBridge";
+    public const string PluginName = "ResoniteIO";
 
     /// <summary>SemVer 形式のプラグインバージョン。</summary>
     public const string PluginVersion = "0.1.0";
