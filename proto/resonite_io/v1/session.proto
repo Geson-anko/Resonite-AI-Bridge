@@ -1,13 +1,13 @@
-// Bridge service: 制御プレーンの最小 RPC を定義する。
+// Session service: 制御プレーンの最小 RPC を定義する。
 //
 // `Ping` は両言語間のコード生成パイプラインと UDS gRPC 疎通を確認するための
 // スモーク RPC。Step 1 (Skeleton) では本 RPC のみを提供し、モダリティごとの
 // streaming RPC は別ファイル (camera.proto, audio.proto, ...) で順次追加する。
 syntax = "proto3";
 
-package resonite_ai_bridge.v1;
+package resonite_io.v1;
 
-option csharp_namespace = "ResoniteAIBridge.V1";
+option csharp_namespace = "ResoniteIO.V1";
 
 // PingRequest はクライアントが任意のメッセージ文字列を送信する。
 message PingRequest {
@@ -22,9 +22,9 @@ message PingResponse {
   int64 server_unix_nanos = 2;
 }
 
-// Bridge は制御プレーンの中心サービス。モダリティ固有の RPC は別 service に
+// Session は制御プレーンの中心サービス。モダリティ固有の RPC は別 service に
 // 分割するため、本 service は接続確認と将来的な capability negotiation のみを
 // 担当する。
-service Bridge {
+service Session {
   rpc Ping(PingRequest) returns (PingResponse);
 }

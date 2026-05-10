@@ -1,7 +1,7 @@
 [project]
-name = "resobridge"
+name = "resoio"
 version = "0.1.0"
-description = "Python client for Resonite AI Bridge"
+description = "Python client for Resonite IO"
 readme = "README.md"
 authors = []
 requires-python = ">=3.12"
@@ -50,7 +50,7 @@ exclude = [
   "**/__pycache__",
   "**/.venv",
   "tests/",
-  "src/resobridge/_generated/",
+  "src/resoio/_generated/",
 ]
 strict = ["src/"]
 reportMissingTypeStubs = false
@@ -79,7 +79,7 @@ exclude = [
   "build",
   "dist",
   "node_modules",
-  "src/resobridge/_generated/",
+  "src/resoio/_generated/",
 ]
 
 # Linter ignore codes
@@ -121,7 +121,7 @@ line-ending = "auto"
 
 [tool.coverage.run]
 omit = [
-  "src/resobridge/_generated/*",
+  "src/resoio/_generated/*",
   "tests/*",
 ]
 

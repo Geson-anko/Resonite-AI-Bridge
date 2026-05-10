@@ -138,7 +138,7 @@ nunit-*.xml
 # =============================================================================
 
 # Python 側の protoc 出力は意図的に commit する (plan §3.C)
-# `python/src/resobridge/_generated/` は ignore せず
+# `python/src/resoio/_generated/` は ignore せず
 #
 # C# 側は csproj の <Protobuf> ItemGroup から build 時生成される (obj/ に出る) ため
 # obj/ の ignore でカバーされる

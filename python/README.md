@@ -1,8 +1,7 @@
-# resobridge
+# resoio
 
-Python client for the [Resonite AI Bridge](../README.md). Wraps the
-`resonite_ai_bridge.v1` gRPC schema (UDS transport, async via `grpclib`) into
-a friendly client library.
+Python client for [Resonite IO](../README.md). Wraps the `resonite_io.v1` gRPC
+schema (UDS transport, async via `grpclib`) into a friendly client library.
 
 ## Quick start
 
@@ -11,7 +10,7 @@ a friendly client library.
 cd python
 uv sync --all-extras
 
-# (Re)generate the protoc output checked into src/resobridge/_generated/
+# (Re)generate the protoc output checked into src/resoio/_generated/
 cd .. && bash scripts/gen_proto.sh
 
 # Run the test suite
@@ -26,12 +25,12 @@ uv run pyright
 ```
 python/
 ├── pyproject.toml         # uv-managed project, pyright/ruff/pytest config
-├── src/resobridge/
+├── src/resoio/
 │   ├── __init__.py        # exposes __version__ via importlib.metadata
-│   ├── bridge.py          # BridgeClient (Step 2 placeholder)
+│   ├── session.py         # SessionClient (Step 2 placeholder)
 │   ├── py.typed           # PEP 561 marker
 │   └── _generated/        # protoc output, committed
-└── tests/                 # mirrors src/resobridge/ 1-to-1
+└── tests/                 # mirrors src/resoio/ 1-to-1
 ```
 
 The package is `pyright`-strict for `src/`. The generated protobuf code under

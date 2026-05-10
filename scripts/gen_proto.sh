@@ -9,7 +9,7 @@
 #   - Python 側のみ `protoc-gen-python_betterproto2` プラグインで生成する。
 #     プラグインは uv 管理下の dev 依存に含まれており、`uv run protoc ...`
 #     経由で .venv の bin が PATH に乗る前提。
-#   - 生成出力は `python/src/resobridge/_generated/` に置き、再生成のたびに
+#   - 生成出力は `python/src/resoio/_generated/` に置き、再生成のたびに
 #     一旦削除して空から作り直す (冪等)。
 #   - `python/pyproject.toml` がまだ無い段階 (Python implementer が後行する
 #     ケース) では skip して exit 0 する。スケルトン構築の中で他者を
@@ -29,7 +29,7 @@ source "$SCRIPT_DIR/lib.sh"
 REPO_ROOT="$(repo_root)"
 PROTO_DIR="$REPO_ROOT/proto"
 PYTHON_PROJECT="$REPO_ROOT/python"
-PYTHON_OUT="$PYTHON_PROJECT/src/resobridge/_generated"
+PYTHON_OUT="$PYTHON_PROJECT/src/resoio/_generated"
 
 main() {
   log "Generating proto code from: $PROTO_DIR"

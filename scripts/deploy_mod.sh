@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # scripts/deploy_mod.sh
 #
-# C# mod (`mod/src/ResoniteAIBridge`) を Release ビルドし、生成された .dll を
+# C# mod (`mod/src/ResoniteIO`) を Release ビルドし、生成された .dll を
 # Resonite の BepInEx plugins ディレクトリへコピーする。
 #
 # RESONITE_PLUGIN_DIR を **必須** とする。justfile が `set dotenv-load := true`
@@ -19,11 +19,11 @@ SCRIPT_NAME="deploy-mod"
 source "$SCRIPT_DIR/lib.sh"
 
 REPO_ROOT="$(repo_root)"
-MOD_PROJECT_DIR="$REPO_ROOT/mod/src/ResoniteAIBridge"
+MOD_PROJECT_DIR="$REPO_ROOT/mod/src/ResoniteIO"
 # Remora.Resonite.Sdk は build 出力を `bin/<Configuration>/mod/client/BepInEx/plugins/<AssemblyName>/`
 # 配下に再配置する。TFM ディレクトリ (net10.0) には素の dll が出ない点に注意。
 BUILD_OUTPUT_GLOB_DIR="$MOD_PROJECT_DIR/bin/Release"
-DLL_NAME="ResoniteAIBridge.dll"
+DLL_NAME="ResoniteIO.dll"
 
 main() {
   if [[ -z "${RESONITE_PLUGIN_DIR:-}" ]]; then

@@ -48,7 +48,7 @@ type: py-type
 build: mod-build
 
 # RESONITE_PLUGIN_DIR (.env) が指す Resonite の plugins ディレクトリへ
-# ResoniteAIBridge.dll をコピー。
+# ResoniteIO.dll をコピー。
 deploy-mod:
     bash scripts/deploy_mod.sh
 

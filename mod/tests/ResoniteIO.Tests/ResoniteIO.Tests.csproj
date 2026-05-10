@@ -1,6 +1,6 @@
 <Project Sdk="Microsoft.NET.Sdk">
   <!--
-    ResoniteAIBridge ユニットテスト。
+    ResoniteIO ユニットテスト。
 
     xunit を採用 (CLAUDE.md §テスト方針)。FrooxEngine に依存するロジックは
     Resonite を実起動しないと真に検証できないため、ここでは純粋な型・状態機械・
@@ -16,8 +16,8 @@
   -->
 
   <PropertyGroup>
-    <RootNamespace>ResoniteAIBridge.Tests</RootNamespace>
-    <AssemblyName>ResoniteAIBridge.Tests</AssemblyName>
+    <RootNamespace>ResoniteIO.Tests</RootNamespace>
+    <AssemblyName>ResoniteIO.Tests</AssemblyName>
     <IsPackable>false</IsPackable>
     <ImplicitUsings>disable</ImplicitUsings>
   </PropertyGroup>
@@ -44,6 +44,6 @@
   </ItemGroup>
 
   <ItemGroup>
-    <ProjectReference Include="..\..\src\ResoniteAIBridge\ResoniteAIBridge.csproj" />
+    <ProjectReference Include="..\..\src\ResoniteIO\ResoniteIO.csproj" />
   </ItemGroup>
 </Project>

@@ -1,6 +1,6 @@
 <Project Sdk="Remora.Resonite.Sdk/2.1.0">
   <!--
-    ResoniteAIBridge mod プロジェクト。
+    ResoniteIO mod プロジェクト。
 
     Remora.Resonite.Sdk (MSBuild SDK) を採用。Sdk が以下を自動で行う:
       - .NET 10 ターゲット設定
@@ -19,8 +19,8 @@
   -->
 
   <PropertyGroup>
-    <RootNamespace>ResoniteAIBridge</RootNamespace>
-    <AssemblyName>ResoniteAIBridge</AssemblyName>
+    <RootNamespace>ResoniteIO</RootNamespace>
+    <AssemblyName>ResoniteIO</AssemblyName>
 
     <!-- Remora SDK プロパティ: Resonite クライアント (FrooxEngine + Renderite)
          向けの BepisLoader mod として組み立てる -->
@@ -36,7 +36,7 @@
   <!-- proto から C# を build-time に生成 (Server スタブのみ; mod 側は server 役) -->
   <ItemGroup>
     <Protobuf
-      Include="..\..\..\proto\resonite_ai_bridge\v1\*.proto"
+      Include="..\..\..\proto\resonite_io\v1\*.proto"
       ProtoRoot="..\..\..\proto"
       GrpcServices="Server"
     />

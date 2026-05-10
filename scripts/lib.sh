@@ -1,7 +1,7 @@
 # scripts/lib.sh
 # shellcheck shell=bash
 #
-# resonite-ai-bridge の shell scripts で共有する汎用ユーティリティ。
+# resonite-io の shell scripts で共有する汎用ユーティリティ。
 # 各 script はファイル先頭で:
 #
 #   SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
