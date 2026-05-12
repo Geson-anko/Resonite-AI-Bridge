@@ -1,0 +1,48 @@
+# Thunderstore CLI 設定。詳細: https://github.com/thunderstore-io/thunderstore-cli
+# mod/Directory.Build.targets の PackTS から `dotnet tcli build/publish` で読まれる。
+
+[config]
+schemaVersion = "0.0.1"
+
+[package]
+namespace = "mlshukai"  # TODO: Thunderstore で取得したチーム名に差し替える
+name = "ResoniteIO"
+# versionNumber は ResoniteIO.csproj の <Version> から渡される (PackTS 経由)
+description = "Bidirectional IPC bridge mod that exposes Resonite as an execution environment for AI agents."
+websiteUrl = "https://github.com/Geson-anko/Resonite-IO"
+containsNsfwContent = false
+
+# 依存: BepisLoader 本体と Resonite モディング共通ラッパ。
+# バージョンは ResoniteIO.csproj が参照している PackageReference と整合させること。
+[package.dependencies]
+ResoniteModding-BepisLoader = "1.5.1"
+ResoniteModding-BepisResoniteWrapper = "1.0.2"
+
+[build]
+icon = "./icon.png"
+readme = "./README.md"
+outdir = "./build"
+
+# 成果物を plugins/ResoniteIO/ 配下に配置 (BepInEx が認識する layout)
+[[build.copy]]
+source = "./src/ResoniteIO/bin/Release/ResoniteIO.dll"
+target = "plugins/ResoniteIO/"
+
+[[build.copy]]
+source = "./src/ResoniteIO/bin/Release/ResoniteIO.pdb"
+target = "plugins/ResoniteIO/"
+
+# CHANGELOG / LICENSE を同梱したい場合はコメント解除する
+# [[build.copy]]
+# source = "./CHANGELOG.md"
+# target = "/"
+# [[build.copy]]
+# source = "../LICENSE"
+# target = "/"
+
+[publish]
+repository = "https://thunderstore.io"
+communities = ["resonite"]
+
+[publish.categories]
+resonite = ["mods"]
