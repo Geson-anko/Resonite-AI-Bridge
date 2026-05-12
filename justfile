@@ -105,7 +105,7 @@ HOST_GID := `id -g`
 
 # Docker image をビルド (debian + .NET 10 + uv + protoc; UID/GID は host 一致)
 container-build:
-    HOST_UID={{HOST_UID}} HOST_GID={{HOST_GID}} docker compose build
+    HOST_UID={{HOST_UID}} HOST_GID={{HOST_GID}} docker compose build --no-cache
 
 # サービスをバックグラウンド起動 (sleep infinity で常駐)
 # bind マウント先のディレクトリを host 側で先に作って root 所有事故を防ぐ
