@@ -15,6 +15,13 @@
         "tcli"
       ],
       "rollForward": true
+    },
+    "ilspycmd": {
+      "version": "10.0.1.8346",
+      "commands": [
+        "ilspycmd"
+      ],
+      "rollForward": false
     }
   }
 }

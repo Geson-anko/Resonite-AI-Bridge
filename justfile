@@ -15,6 +15,12 @@ setup:
 gen-proto:
     bash scripts/gen_proto.sh
 
+# Resonite の主要 first-party DLL を ILSpy で decompile し、
+# プロジェクトルートの decompiled/ に project 形式で書き出す。
+# 既存の decompiled/ は wipe される (idempotent)。要 .env の ResonitePath。
+decompile:
+    bash scripts/decompile.sh
+
 # ===== Python (python/) =================================================
 
 py-format:
