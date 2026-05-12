@@ -35,7 +35,7 @@ resonite-io/
 │   ├── pyproject.toml
 │   └── src/resoio/{session,camera,audio,locomotion,manipulation}.py
 │       └── _generated/      # protoc 出力 (commit する)
-├── scripts/{setup.sh, gen_proto.sh, deploy_mod.sh}
+├── scripts/{setup.sh, gen_proto.sh}
 └── docs/  .github/workflows/  README.md
 ```
 
@@ -46,15 +46,19 @@ C# 側のモジュール構造と Python 側のモジュール構造は **モダ
 ### タスクランナー
 
 - **`just`** をリポジトリルートに置く `justfile` で運用する
-- `justfile` は `set dotenv-load := true` を有効化し、`.env`（gitignore 済み・`.env.example` をコピー）から環境変数 (`RESONITE_PLUGIN_DIR` など) を読む
+- `justfile` は `set dotenv-load := true` を有効化し、`.env`（gitignore 済み・`.env.example` をコピー）から環境変数 (`ResonitePath` など) を読む
 - レシピは Unix シェル前提で書く（Linux 一級サポートの方針と一致）
 - C# / Python / proto をまたぐ作業を 1 コマンドにまとめるのが `just` 採用の目的。生のコマンドを直接叩くのは troubleshooting 時のみ
 
 ### C# (mod 側)
 
 - ランタイム/SDK: **.NET 10 SDK**
-- 依存: `Remora.Resonite.Sdk` (NuGet)、`BepisLoader`
-- フォーマッタ: `csharpier` (`dotnet tool install -g csharpier`)
+- 依存: BepisLoader 公式 Template (`dotnet new bep6resonite`) 準拠。`mod/src/ResoniteIO/ResoniteIO.csproj` で以下を明示参照:
+  - `BepInEx.ResonitePluginInfoProps` (csproj メタデータから `PluginMetadata.*` を build-time 生成)
+  - `ResoniteModding.BepInExResoniteShim` (`[ResonitePlugin]` 属性と `ResoniteHooks.OnEngineReady`)
+  - `ResoniteModding.BepisResoniteWrapper` (Harmony 等のラッパ)
+- フォーマッタ: `csharpier` (`.config/dotnet-tools.json` 配下の local tool、`dotnet csharpier ...` で呼ぶ)
+- 配布: `tcli` (`.config/dotnet-tools.json` 配下の local tool) で Thunderstore zip 生成。`just mod-pack` がラップ
 - 静的解析: Roslyn analyzers + `Nullable=enable` + `TreatWarningsAsErrors=true` (StyleCop は不採用)
 - テスト: `xunit`
 - Hot reload: 将来検討 (BepisLoader debugger attach 時)
@@ -80,7 +84,7 @@ C# 側のモジュール構造と Python 側のモジュール構造は **モダ
 
 - `scripts/setup.sh` は **任意の Linux ディストリ** で動くこと。公式バイナリインストーラ優先 (`dotnet-install.sh`、`uv` の curl installer、`protoc` の GitHub releases バイナリ)
 - ディストロ依存のパッケージマネージャ (apt/dnf/pacman) は最小限に留める
-- `csharpier` 等は `dotnet tool install -g`、`betterproto2_compiler` 等は `uv` 経由
+- `csharpier` / `tcli` 等の .NET CLI ツールは **`.config/dotnet-tools.json` の local tool** として固定し、`dotnet tool restore` + `dotnet <tool>` で呼び出す (global tool + PATH 操作は採らない)。`betterproto2_compiler` 等は `uv` 経由
 
 ## コマンド
 
@@ -90,18 +94,20 @@ C# 側のモジュール構造と Python 側のモジュール構造は **モダ
 | ----------------- | ------------------------------------------------------------------------------------------------ |
 | `just setup`      | `scripts/setup.sh` を呼んで .NET SDK / protoc / uv / Python deps / pre-commit を一発インストール |
 | `just gen-proto`  | `scripts/gen_proto.sh` で `.proto` から C# / Python の両側コードを生成                           |
-| `just deploy-mod` | `scripts/deploy_mod.sh` で `dotnet build` → `.dll` を Resonite の BepInEx/plugins/ にコピー      |
+| `just deploy-mod` | `just mod-build` を呼び、csproj の PostBuild Target 経由で `$(ResonitePath)/BepInEx/plugins/ResoniteIO/` に DLL+PDB を配置 (ResonitePath 未設定なら exit 1) |
+| `just mod-pack`   | `dotnet build -c Release -t:PackTS` で Thunderstore 配布用 zip を `mod/build/` に生成             |
 | `just format`     | C# (`csharpier`) と Python (`ruff format` + `ruff check --fix`) を両方走らせる                   |
 | `just test`       | C# (`dotnet test`) と Python (`pytest -v --cov`) を両方走らせる                                  |
 | `just type`       | Python の `pyright` を `python/src/` に対し strict 実行                                          |
 | `just build`      | C# mod を `dotnet build -c Release`                                                              |
 | `just run`        | `format` → `gen-proto` (proto に変更があれば) → `build` → `test` → `type` を直列実行             |
-| `just clean`      | `dist/`、`__pycache__`、`.pytest_cache`、`bin/`、`obj/` 等を削除                                 |
+| `just clean`      | `clean-py` と `mod-clean` を実行                                                                  |
+| `just mod-clean`  | `mod/{bin,obj,build}` を削除し、`$(ResonitePath)/BepInEx/plugins/ResoniteIO/` も撤去             |
 
-サブコマンド分離が必要な場合の補助レシピ（実装時に追加）:
+サブコマンド分離が必要な場合の補助レシピ:
 
 - `just py-test` / `just py-type` / `just py-format` — Python 側のみ
-- `just mod-build` / `just mod-test` / `just mod-format` — C# 側のみ
+- `just mod-build` / `just mod-test` / `just mod-format` / `just mod-pack` / `just mod-clean` — C# 側のみ
 
 細かい制御が必要な場合のフォールバック:
 
@@ -119,6 +125,7 @@ C# 側のモジュール構造と Python 側のモジュール構造は **モダ
 
 - **通常クライアント上で動作** (Camera 描画が必要なため Headless は不可)
 - Steam で Resonite をインストール: Linux ネイティブ FrooxEngine + Proton 経由 Renderite
+- `.env` の **`ResonitePath`** に Resonite の実行ファイルディレクトリ (`Resonite.exe` / `FrooxEngine.dll` / `BepInEx/` が置かれている場所) を絶対パスで指定する。decompile / publicized 出力先ではない点に注意
 - リモート開発時は Sunshine + Moonlight を想定 (plan §3.A)
 - 開発用ワールドは不要 (ワールド非依存に設計)
 

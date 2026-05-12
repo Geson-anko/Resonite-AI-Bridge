@@ -37,6 +37,22 @@ mod-build:
 mod-test:
     cd mod && dotnet test
 
+# Thunderstore 配布用 zip を build/ に生成 (mod/Directory.Build.targets の PackTS)。
+# 公開時は `just mod-pack PublishTS=true` で `dotnet tcli publish` に切替わる。
+mod-pack:
+    cd mod && dotnet build ResoniteIO.sln -c Release -t:PackTS -v d
+
+# ローカル開発成果物と Resonite に配置された plugin を撤去する。
+# ResonitePath が空 / ディレクトリが無い場合は plugin 撤去を skip する (安全側)。
+mod-clean:
+    find mod -type d -name 'bin' -prune -exec rm -rf {} +
+    find mod -type d -name 'obj' -prune -exec rm -rf {} +
+    rm -rf mod/build
+    if [ -n "${ResonitePath:-}" ] && [ -d "$ResonitePath/BepInEx/plugins/ResoniteIO" ]; then \
+        rm -rf "$ResonitePath/BepInEx/plugins/ResoniteIO" && \
+        echo "Removed $ResonitePath/BepInEx/plugins/ResoniteIO"; \
+    fi
+
 # ===== 横断 ==============================================================
 
 format: py-format mod-format
@@ -47,17 +63,28 @@ type: py-type
 
 build: mod-build
 
-# RESONITE_PLUGIN_DIR (.env) が指す Resonite の plugins ディレクトリへ
-# ResoniteIO.dll をコピー。
-deploy-mod:
-    bash scripts/deploy_mod.sh
+# `just mod-build` で csproj の PostBuild Target が
+# $(ResonitePath)/BepInEx/plugins/ResoniteIO/ に DLL+PDB を Copy する。
+# 名前で意図を表すために専用レシピを残す。
+# 配置先は ResonitePath 優先、無ければ Steam デフォルトパス。
+# どちらも無効なら build は成功するが Copy がスキップされるためエラー扱い。
+deploy-mod: mod-build
+    @TARGET_ROOT="${ResonitePath:-$HOME/.steam/steam/steamapps/common/Resonite}"; \
+    DLL="$TARGET_ROOT/BepInEx/plugins/ResoniteIO/ResoniteIO.dll"; \
+    if [ -f "$DLL" ]; then \
+        echo "Deployed to $TARGET_ROOT/BepInEx/plugins/ResoniteIO/"; \
+    else \
+        echo "ERROR: 配置先に DLL が見当たりません ($DLL)。" >&2; \
+        echo "       .env に ResonitePath=<Resonite 実行ディレクトリ> を設定してください。" >&2; \
+        exit 1; \
+    fi
 
 # format → gen-proto → build → test → type を直列実行。コミット前のゲート。
 run: format gen-proto build test type
 
 # ===== Clean =============================================================
 
-clean: clean-py clean-mod
+clean: clean-py mod-clean
 
 clean-py:
     rm -rf python/.venv
@@ -67,7 +94,3 @@ clean-py:
     rm -rf python/.coverage
     find python -type d -name '__pycache__' -prune -exec rm -rf {} +
     find python -type d -name '*.egg-info' -prune -exec rm -rf {} +
-
-clean-mod:
-    find mod -type d -name 'bin' -prune -exec rm -rf {} +
-    find mod -type d -name 'obj' -prune -exec rm -rf {} +

@@ -1,0 +1,37 @@
+<Project>
+  <!--
+    Thunderstore パッケージング Target。
+    - ローカルビルド: `dotnet build -c Release -t:PackTS -v d`
+      → mod/build/<namespace>-ResoniteIO-<version>.zip を生成
+    - 公開:       `dotnet build -c Release -t:PackTS -p:PublishTS=true ...`
+      → thunderstore.io にアップロード (要 tcli 認証)
+
+    本ターゲットは ThunderstorePackable=true のときだけ実行される。
+    tcli は .config/dotnet-tools.json で local tool として管理 (csharpier と同様)。
+  -->
+
+  <Target Name="PackTS" DependsOnTargets="Build">
+    <CallTarget
+      Targets="PackTS_Execute"
+      Condition="'$(ThunderstorePackable)' == 'true' and '$(Configuration)' == 'Release'"
+    />
+  </Target>
+
+  <Target Name="PackTS_Execute">
+    <PropertyGroup>
+      <BuildArgument Condition="'$(PublishTS)' != 'true'">build</BuildArgument>
+      <BuildArgument Condition="'$(PublishTS)' == 'true'">publish</BuildArgument>
+    </PropertyGroup>
+
+    <!-- $(MSBuildThisFileDirectory) は本ファイル (= mod/) を含むディレクトリ。
+         sln 経由でも csproj 直叩きでも安定して mod/ を指すので $(SolutionDir)
+         より頑健 (Template 構造での `dotnet new bep6resonite` 出力に依存しない)。
+         dotnet tool restore はリポジトリルート (.config/dotnet-tools.json) を
+         探すため $(MSBuildThisFileDirectory)/../ を WorkingDir にする。 -->
+    <Exec Command="dotnet tool restore" WorkingDirectory="$(MSBuildThisFileDirectory)../" />
+    <Exec
+      Command="dotnet tcli $(BuildArgument) --package-version $(Version)"
+      WorkingDirectory="$(MSBuildThisFileDirectory)"
+    />
+  </Target>
+</Project>

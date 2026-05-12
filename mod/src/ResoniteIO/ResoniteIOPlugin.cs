@@ -1,5 +1,8 @@
 using BepInEx;
+using BepInEx.Logging;
 using BepInEx.NET.Common;
+using BepInExResoniteShim;
+using BepisResoniteWrapper;
 
 namespace ResoniteIO;
 
@@ -7,30 +10,49 @@ namespace ResoniteIO;
 /// BepisLoader 経由で Resonite クライアントに読み込まれる mod のエントリポイント。
 /// </summary>
 /// <remarks>
-/// Step 1 (skeleton) では FrooxEngine API を一切呼ばず、ロードログを出すだけの
-/// Hello World 実装。Step 2 以降で gRPC server の起動 / モダリティ別ストリームの
-/// 配線を <see cref="Load"/> 内に追加していく。本クラスを <see cref="BasePlugin"/>
-/// 派生にしているのは BepInEx 6 の慣習に従うため。
+/// PluginMetadata 定数は csproj の Version / Authors / PackageId / Product /
+/// RepositoryUrl から BepInEx.ResonitePluginInfoProps が build-time に生成する。
+/// 二重管理を避けるため、本クラスにはメタデータ定数を持たない。
 /// </remarks>
-[BepInPlugin(PluginGuid, PluginName, PluginVersion)]
+[ResonitePlugin(
+    PluginMetadata.GUID,
+    PluginMetadata.NAME,
+    PluginMetadata.VERSION,
+    PluginMetadata.AUTHORS,
+    PluginMetadata.REPOSITORY_URL
+)]
+[BepInDependency(
+    BepInExResoniteShim.PluginMetadata.GUID,
+    BepInDependency.DependencyFlags.HardDependency
+)]
 public sealed class ResoniteIOPlugin : BasePlugin
 {
     /// <summary>
-    /// BepInEx に通知する一意なプラグイン識別子。逆 DNS 形式で衝突を避ける。
+    /// プラグインから static にアクセスできる BepInEx ログハンドラ。<see cref="Load"/>
+    /// 内で <c>base.Log</c> を代入する Template の慣習に従う。
     /// </summary>
-    public const string PluginGuid = "net.mlshukai.resonite-io";
-
-    /// <summary>BepInEx ログ等で表示される人間可読のプラグイン名。</summary>
-    public const string PluginName = "ResoniteIO";
-
-    /// <summary>SemVer 形式のプラグインバージョン。</summary>
-    public const string PluginVersion = "0.1.0";
+    internal static new ManualLogSource Log = null!;
 
     /// <summary>
     /// プラグインロード時に BepInEx ランタイムから呼び出される。
     /// </summary>
+    /// <remarks>
+    /// この時点では FrooxEngine の初期化が完了していない可能性があるため、
+    /// Engine.Current 配下に触れる処理は <see cref="OnEngineReady"/> 側に書く。
+    /// </remarks>
     public override void Load()
     {
-        Log.LogInfo($"{PluginName} {PluginVersion} loaded");
+        Log = base.Log;
+        ResoniteHooks.OnEngineReady += OnEngineReady;
+        Log.LogInfo($"{PluginMetadata.NAME} {PluginMetadata.VERSION} loaded");
+    }
+
+    /// <summary>
+    /// FrooxEngine が完全初期化された後に呼ばれるフック。Step 2 以降で
+    /// gRPC server 起動などのモダリティ配線をここに追加する。
+    /// </summary>
+    private void OnEngineReady()
+    {
+        Log.LogInfo("Engine ready — modality wiring will be added in Step 2+");
     }
 }

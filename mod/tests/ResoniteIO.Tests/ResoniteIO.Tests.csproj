@@ -7,15 +7,17 @@
     proto 変換の検証に絞る。Resonite 本体を含む E2E は mod/tests/manual/ に
     Markdown 手順書として残す方針。
 
-    本プロジェクトは Microsoft.NET.Sdk 直接 (= Remora.Resonite.Sdk を使わない)。
-    テストは BepInEx ランタイム上で動かさないため Resonite 参照アセンブリを
-    引き込む必要がない。代わりに ProjectReference で本体プロジェクトを参照する。
+    main 側 csproj は Microsoft.NET.Sdk + BepInExResoniteShim ベース。
+    本テストプロジェクトでも以下の理由で BepInEx 系を明示参照する:
+      - BasePlugin / [ResonitePlugin] / PluginMetadata の型解決
+      - Resonite 本体は起動しないので、これらの DLL がテスト出力に必要
 
-    ImplicitUsings=disable: 本体側 (Remora SDK) は implicit usings 有効だが、
-    テストでは型を明示的に import するルール。
+    ImplicitUsings=disable: 本体側 (ImplicitUsings=enable) と異なり、テストでは
+    型を明示的に import するルール。
   -->
 
   <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
     <RootNamespace>ResoniteIO.Tests</RootNamespace>
     <AssemblyName>ResoniteIO.Tests</AssemblyName>
     <IsPackable>false</IsPackable>
@@ -34,13 +36,12 @@
       <PrivateAssets>all</PrivateAssets>
     </PackageReference>
     <!--
-      BepInEx assemblies are needed at test runtime because the plugin class
-      inherits BasePlugin. The Remora SDK marks these as Private=false for the
-      mod itself (Resonite already provides them), but tests run outside of
-      Resonite so we copy them locally.
+      テスト実行時に BasePlugin / BepInPlugin / [ResonitePlugin] 等の型を
+      解決するため、これらの assembly をローカルコピーする。
     -->
     <PackageReference Include="BepInEx.Core" Version="6.0.0-be.730" />
     <PackageReference Include="BepInEx.NET.Common" Version="6.0.0-be.730" />
+    <PackageReference Include="ResoniteModding.BepInExResoniteShim" Version="0.9.*" />
   </ItemGroup>
 
   <ItemGroup>

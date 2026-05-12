@@ -1,39 +1,91 @@
-<Project Sdk="Remora.Resonite.Sdk/2.1.0">
+<Project Sdk="Microsoft.NET.Sdk">
   <!--
-    ResoniteIO mod プロジェクト。
+    ResoniteIO mod プロジェクト (BepisLoader 公式 Template 準拠)。
 
-    Remora.Resonite.Sdk (MSBuild SDK) を採用。Sdk が以下を自動で行う:
-      - .NET 10 ターゲット設定
-      - Resonite/FrooxEngine の publicized 参照アセンブリの解決
-      - BepisLoader 向け依存 (BepInEx.NET.Common.BasePlugin, ResonitePluginInfoProps,
-        BepInExResoniteShim, BepisResoniteWrapper) の自動 PackageReference
-      - 出力先を BepInEx/plugins/<AssemblyName>/ に整える
+    主要な依存:
+      - BepInEx.ResonitePluginInfoProps: csproj のメタデータ
+        (Version / Authors / PackageId / Product / RepositoryUrl) から
+        ResoniteIO.PluginMetadata を build-time に生成する
+      - ResoniteModding.BepInExResoniteShim: [ResonitePlugin] 属性と
+        ResoniteHooks.OnEngineReady を提供
+      - ResoniteModding.BepisResoniteWrapper: Harmony 等のラッパ
 
-    BepInEx.Core / Remora.Resonite.Sdk / BepInEx.NET.Common などの正確な
-    バージョンは Sdk が解決する (Mod.BepisLoader.targets の `3.*` `0.9.*` `1.*`
-    レンジを採用)。本プロジェクトでは個別に PackageReference しない。
+    FrooxEngine 参照解決:
+      - $(ResonitePath) (env var) が指す Resonite 実行ディレクトリの
+        FrooxEngine.dll / Elements.Core.dll / Renderite.Shared.dll を
+        HintPath で直接参照 (Private=False で出力に含めない)
+      - $(ResonitePath) 未設定時は Steam デフォルトパスを自動検出
+      - それでも GamePath が空なら Resonite.GameLibs NuGet にフォールバック
+        (PrivateAssets=all で build-only)
 
-    proto コード生成は Grpc.Tools の <Protobuf> ItemGroup で build-time に行う。
-    生成された C# は obj/ 配下に出力されるため commit 不要 (CLAUDE.md / plan
-    §3.E と整合)。
+    proto は Grpc.Tools の <Protobuf> ItemGroup で build-time に C# 生成
+    (Server スタブ; mod 側は server 役)。生成物は obj/ に出るため commit しない。
+
+    PostBuild: 成果物を $(GamePath)BepInEx/plugins/$(AssemblyName)/ に Copy。
+    GamePath が空のときは Copy を skip する (CI 安全)。
   -->
 
   <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
     <RootNamespace>ResoniteIO</RootNamespace>
     <AssemblyName>ResoniteIO</AssemblyName>
 
-    <!-- Remora SDK プロパティ: Resonite クライアント (FrooxEngine + Renderite)
-         向けの BepisLoader mod として組み立てる -->
-    <ResoniteTarget>client</ResoniteTarget>
-    <ResoniteProjectType>mod</ResoniteProjectType>
-    <ResoniteTargetModLoader>BepisLoader</ResoniteTargetModLoader>
+    <!-- PluginMetadata 生成元 (BepInEx.ResonitePluginInfoProps が読み取る) -->
+    <Version>0.1.0</Version>
+    <Authors>mlshukai</Authors>
+    <PackageId>net.mlshukai.resonite-io</PackageId>
+    <Product>ResoniteIO</Product>
+    <RepositoryUrl>https://github.com/Geson-anko/Resonite-IO</RepositoryUrl>
 
-    <!-- ローカルに Resonite が無い CI / 開発機でも build を通すため、
-         実インストールではなく SDK 同梱の publicized 参照アセンブリを強制 -->
-    <ResoniteForceReferenceAssemblies>true</ResoniteForceReferenceAssemblies>
+    <!-- ビルド挙動 -->
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Deterministic>true</Deterministic>
+    <AppendTargetFrameworkToOutputPath>false</AppendTargetFrameworkToOutputPath>
+    <CopyToPlugins>true</CopyToPlugins>
+    <ThunderstorePackable>true</ThunderstorePackable>
+
+    <!-- Resonite 実行ディレクトリ解決: env var → Steam Win → Steam Linux -->
+    <GamePath Condition="'$(ResonitePath)' != ''">$(ResonitePath)/</GamePath>
+    <GamePath
+      Condition="'$(GamePath)' == '' and Exists('$(MSBuildProgramFiles32)\Steam\steamapps\common\Resonite\')"
+      >$(MSBuildProgramFiles32)\Steam\steamapps\common\Resonite\</GamePath
+    >
+    <GamePath
+      Condition="'$(GamePath)' == '' and Exists('$(HOME)/.steam/steam/steamapps/common/Resonite/')"
+      >$(HOME)/.steam/steam/steamapps/common/Resonite/</GamePath
+    >
+    <PluginTargetDir>$(GamePath)BepInEx\plugins\$(AssemblyName)</PluginTargetDir>
   </PropertyGroup>
 
-  <!-- proto から C# を build-time に生成 (Server スタブのみ; mod 側は server 役) -->
+  <!-- 必須: BepisLoader 向けの mod ランタイム依存と PluginMetadata 生成 -->
+  <ItemGroup>
+    <PackageReference Include="BepInEx.ResonitePluginInfoProps" Version="3.*" />
+    <PackageReference Include="ResoniteModding.BepInExResoniteShim" Version="0.9.*" />
+    <PackageReference Include="ResoniteModding.BepisResoniteWrapper" Version="1.*" />
+  </ItemGroup>
+
+  <!-- GamePath が無い (CI / 開発機に Resonite 未インストール) ときの NuGet フォールバック -->
+  <ItemGroup Condition="!Exists('$(GamePath)')">
+    <PackageReference Include="Resonite.GameLibs" Version="2025.*" PrivateAssets="all" />
+  </ItemGroup>
+
+  <!-- GamePath があるときはローカル DLL を直接参照する (Template と同じ運用) -->
+  <ItemGroup Condition="Exists('$(GamePath)')">
+    <Reference Include="FrooxEngine">
+      <HintPath>$(GamePath)FrooxEngine.dll</HintPath>
+      <Private>False</Private>
+    </Reference>
+    <Reference Include="Elements.Core">
+      <HintPath>$(GamePath)Elements.Core.dll</HintPath>
+      <Private>False</Private>
+    </Reference>
+    <Reference Include="Renderite.Shared">
+      <HintPath>$(GamePath)Renderite.Shared.dll</HintPath>
+      <Private>False</Private>
+    </Reference>
+  </ItemGroup>
+
+  <!-- proto から C# を build-time に生成 (Server スタブのみ) -->
   <ItemGroup>
     <Protobuf
       Include="..\..\..\proto\resonite_io\v1\*.proto"
@@ -50,4 +102,32 @@
     </PackageReference>
     <PackageReference Include="Grpc.Net.Client" Version="2.71.0" />
   </ItemGroup>
+
+  <!-- テストアセンブリから internal な PluginMetadata を参照できるようにする
+       (BepInEx.ResonitePluginInfoProps が internal として生成する想定) -->
+  <ItemGroup>
+    <InternalsVisibleTo Include="ResoniteIO.Tests" />
+  </ItemGroup>
+
+  <!-- $(GamePath)BepInEx/plugins/$(AssemblyName)/ に成果物を配置 -->
+  <Target Name="PostBuild" AfterTargets="PostBuildEvent">
+    <ItemGroup>
+      <PluginFiles Include="$(TargetPath)" />
+      <PluginFiles
+        Include="$(TargetDir)$(TargetName).pdb"
+        Condition="Exists('$(TargetDir)$(TargetName).pdb')"
+      />
+    </ItemGroup>
+
+    <Copy
+      SourceFiles="@(PluginFiles)"
+      DestinationFolder="$(PluginTargetDir)"
+      Condition="'$(CopyToPlugins)' == 'true' and '$(GamePath)' != ''"
+    />
+    <Message
+      Text="Copied plugin files to $(PluginTargetDir)"
+      Importance="high"
+      Condition="'$(CopyToPlugins)' == 'true' and '$(GamePath)' != ''"
+    />
+  </Target>
 </Project>
