@@ -84,7 +84,11 @@
       "Bash(dotnet tool *)",
       "Bash(strings *)",
       "Bash(unzip *)",
-      "Read"
+      "Read",
+      "Bash(dotnet ilspycmd *)",
+      "Bash(shellcheck *)",
+      "Bash(uvx *)",
+      "Bash(pre-commit run *)"
     ],
     "deny": [
       "Bash(git push:*)",
