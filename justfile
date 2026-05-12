@@ -7,10 +7,6 @@ default:
 
 # ===== 環境構築 =========================================================
 
-# scripts/setup.sh で .NET / uv / protoc / just / csharpier / pre-commit を一括導入。
-setup:
-    bash scripts/setup.sh
-
 # proto から Python 側の生成コードを再生成する。C# 側は dotnet build で自動生成。
 gen-proto:
     bash scripts/gen_proto.sh
@@ -100,3 +96,36 @@ clean-py:
     rm -rf python/.coverage
     find python -type d -name '__pycache__' -prune -exec rm -rf {} +
     find python -type d -name '*.egg-info' -prune -exec rm -rf {} +
+
+# ===== Container ============================================================
+
+# host UID/GID を compose に渡すための共通変数
+HOST_UID := `id -u`
+HOST_GID := `id -g`
+
+# Docker image をビルド (debian + .NET 10 + uv + protoc; UID/GID は host 一致)
+container-build:
+    HOST_UID={{HOST_UID}} HOST_GID={{HOST_GID}} docker compose build
+
+# サービスをバックグラウンド起動 (sleep infinity で常駐)
+# bind マウント先のディレクトリを host 側で先に作って root 所有事故を防ぐ
+container-up:
+    @mkdir -p "${ResonitePath}/BepInEx/plugins/ResoniteIO"
+    HOST_UID={{HOST_UID}} HOST_GID={{HOST_GID}} docker compose up -d
+
+# サービス停止 (volume は残す)
+container-down:
+    docker compose down
+
+# 初期化: ホスト repo を /workspace volume へ bootstrap copy + 依存解決
+# 既に内容があれば --force で上書き
+container-init *ARGS:
+    docker compose exec dev bash /source/scripts/container-init.sh {{ARGS}}
+
+# コンテナ内 shell に attach (bash, /workspace カレント)
+container-shell:
+    docker compose exec dev bash
+
+# Docker image / volumes / ネットワークを完全削除 (work データも消える, destructive)
+container-clean:
+    docker compose down -v --rmi local --remove-orphans
