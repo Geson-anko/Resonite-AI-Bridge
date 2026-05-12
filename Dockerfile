@@ -22,6 +22,7 @@ ENV HOME=/home/dev
 
 # 最小限のシステム依存。python3 / build-essential は入れない (uv が独自 Python を引く)。
 # libicu72 は .NET SDK の globalization 初期化に必要 (bookworm-slim には含まれない)。
+# shellcheck / shfmt は scripts/ の lint 用 (pre-commit からも system binary として呼ばれる)。
 RUN apt-get update && apt-get install -y --no-install-recommends \
         git \
         curl \
@@ -32,6 +33,8 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
         rsync \
         bash-completion \
         libicu72 \
+        shellcheck \
+        shfmt \
  && rm -rf /var/lib/apt/lists/*
 
 # ツール一式を /usr/local 配下に固定。1 RUN にまとめてレイヤを抑える。
