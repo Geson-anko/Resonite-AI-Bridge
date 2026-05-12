@@ -109,7 +109,9 @@ container-build:
 
 # サービスをバックグラウンド起動 (sleep infinity で常駐)
 # bind マウント先のディレクトリを host 側で先に作って root 所有事故を防ぐ
+# ResonitePath が未設定だとルート直下に mkdir してしまうため明示エラー
 container-up:
+    @: "${ResonitePath:?ResonitePath が未設定です。.env に Resonite 実行ディレクトリを設定してください。}"
     @mkdir -p "${ResonitePath}/BepInEx/plugins/ResoniteIO"
     HOST_UID={{HOST_UID}} HOST_GID={{HOST_GID}} docker compose up -d
 
