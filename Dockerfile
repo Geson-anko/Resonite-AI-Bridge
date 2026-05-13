@@ -78,9 +78,13 @@ RUN set -eux; \
 # 用意することで、Docker が初回マウント時にディレクトリ属性を継承し named volume が
 # dev 所有で初期化される (root 所有事故の予防)。
 # NOPASSWD sudo を付与: host UID 一致を保ちつつ `sudo apt-get ...` 等の特権操作を可能に。
+# /home/dev/.claude/settings.json で Claude Code を bypassPermissions モードに固定:
+# コンテナはサンドボックスなので、内部での権限プロンプトは省略してよい。
 RUN groupadd -g ${USER_GID} dev \
  && useradd -m -u ${USER_UID} -g ${USER_GID} -s /bin/bash dev \
- && mkdir -p /workspace /home/dev/.nuget/packages /home/dev/.cache/uv \
+ && mkdir -p /workspace /home/dev/.nuget/packages /home/dev/.cache/uv /home/dev/.claude \
+ && printf '%s\n' '{' '  "permissions": {' '    "defaultMode": "bypassPermissions"' '  }' '}' \
+      > /home/dev/.claude/settings.json \
  && chown -R dev:dev /workspace /home/dev \
  && echo 'dev ALL=(ALL) NOPASSWD: ALL' > /etc/sudoers.d/dev \
  && chmod 0440 /etc/sudoers.d/dev
