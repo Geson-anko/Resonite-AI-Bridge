@@ -35,7 +35,7 @@ ______________________________________________________________________
 
 ## 2. アーキテクチャ概要
 
-```
+```text
             [Python Process]                    [Resonite Process]
    ┌────────────────────────────┐    ┌────────────────────────────────┐
    │  resoio (Python pkg)       │    │  ResoniteIO (BepisLoader mod)  │
@@ -81,82 +81,97 @@ ______________________________________________________________________
 
 ## 3. Step 0: 開発環境・プロジェクトセットアップ
 
+> **ステータス: 完了**。Docker ベースの開発環境に切り替わったため、当初想定していた host 直インストールの `setup.sh` は廃止。
+
 ### A. Resonite 実行環境 (Linux)
 
-- [ ] Steam で Resonite をインストール (Linux ネイティブ FrooxEngine + Proton 経由 Renderite)
-- [ ] BepisLoader を導入
-- [ ] Sunshine + Moonlight でリモートデスクトップ動作確認
+- [x] Steam で Resonite をインストール (Linux ネイティブ FrooxEngine + Proton 経由 Renderite)
+- [x] BepisLoader を導入
+- [x] Sunshine + Moonlight でリモートデスクトップ動作確認
 - ~~開発用プライベートワールド~~ (不要: ワールド非依存に設計)
 
-### B. 開発ツールチェーン
+### B. 開発ツールチェーン (Docker 化)
 
-- [ ] .NET 10 SDK
-- [ ] `Remora.Resonite.Sdk` を NuGet 参照
-- [ ] VSCode + C# Dev Kit + Python 拡張 (Remote SSH)
-- [ ] `protoc` + プラグイン (両言語コード生成)
-- [ ] **uv** (Python パッケージマネージャ)
-- [ ] **`scripts/setup.sh`**: 上記すべてを **任意の Linux ディストリ** で一発インストールするシェルスクリプト
-  - 公式バイナリインストーラを優先 (`dotnet-install.sh`, `uv` の curl installer, `protoc` の GitHub releases バイナリ)
-  - ディストロ依存のパッケージマネージャ (apt/dnf/pacman) は最小限に留める
-  - `csharpier` 等は `dotnet tool install -g`、`betterproto2_compiler` 等は `uv` 経由
+ホスト側に必要なのは **`docker` / `docker compose v2` / `just` の 3 つだけ**。
+.NET SDK / uv / protoc / pre-commit はすべて `debian:bookworm-slim` ベースの単一 image に同梱。
 
-### C. モノレポ構造
+- [x] `Dockerfile` (.NET 10 SDK / uv / just / protoc + shellcheck/shfmt)
+- [x] `docker-compose.yml` (`name: resonite-io-${USER}` で user 単位の名前空間、`/source` ro bind + `/workspace` named volume、`${ResonitePath}` の重ね bind)
+- [x] `scripts/container-init.sh` (`/workspace` への rsync bootstrap + `dotnet tool restore` + `uv sync`)
+- [x] dotnet local tools (`.config/dotnet-tools.json`): `csharpier`, `tcli` (Thunderstore packaging), `ilspycmd` (decompile)
+- [x] `pre-commit` (ruff / pyupgrade / docformatter / mdformat / codespell / uv-lock / pygrep / shellcheck / shfmt)
+- [x] VSCode 推奨拡張一覧 (`.vscode/extensions.json`): C# Dev Kit / Pylance / Ruff / csharpier / buf / docker など
+- ~~`scripts/setup.sh`~~ (廃止: Docker 環境に置き換え)
+
+### C. モノレポ構造 (実装済み)
 
 - **リポジトリ名**: `resonite-io`
 - **C# Mod アセンブリ名**: `ResoniteIO`
 - **Python パッケージ名**: `resoio`
 
-```
+```text
 resonite-io/
+├── Dockerfile                     # 開発コンテナ image (debian + .NET 10 + uv + protoc)
+├── docker-compose.yml             # dev サービス定義 (host UID/GID 一致 / ResonitePath bind)
+├── justfile                       # ルートタスクランナー (build / test / container-*)
+├── buf.yaml                       # proto lint/breaking (modules: proto/)
+├── .pre-commit-config.yaml
+├── .env.example                   # ResonitePath 等の雛形 (.env は gitignore)
+│
 ├── proto/                         # 単一の真実: .proto 定義
 │   └── resonite_io/v1/
-│       ├── session.proto          # セッション管理・ヘルスチェック
-│       ├── camera.proto
-│       ├── audio.proto
-│       ├── locomotion.proto
-│       └── manipulation.proto
+│       └── session.proto          # Step 1 完了 (Ping RPC)
+│                                  # camera/audio/locomotion/manipulation は後続 Step で追加
 │
-├── mod/                           # C# 側 (BepisLoader mod)
+├── mod/                           # C# 側 (BepisLoader mod, .NET 10)
 │   ├── ResoniteIO.sln
+│   ├── Directory.Build.{props,targets}
+│   ├── NuGet.config
+│   ├── thunderstore.toml          # Thunderstore メタデータ (tcli が読む)
+│   ├── icon.png
 │   ├── src/ResoniteIO/
 │   │   ├── ResoniteIO.csproj
-│   │   ├── Session/                # gRPC server 起点・セッション管理
-│   │   ├── Camera/                 # RGB フレーム取得・配信
-│   │   ├── Audio/                  # 音声入出力
-│   │   ├── Locomotion/             # LocalUser 駆動
-│   │   └── Manipulation/           # Hand / Grabber 制御
-│   └── tests/
+│   │   ├── ResoniteIOPlugin.cs     # BasePlugin + OnEngineReady フック
+│   │   ├── Session/                # (.gitkeep のみ)  Step 2 で実装
+│   │   ├── Camera/                 # (.gitkeep のみ)  Step 3 で実装
+│   │   ├── Audio/                  # (.gitkeep のみ)
+│   │   ├── Locomotion/             # (.gitkeep のみ)
+│   │   └── Manipulation/           # (.gitkeep のみ)
+│   └── tests/ResoniteIO.Tests/    # xunit (smoke test のみ)
 │
 ├── python/                        # Python 側
-│   ├── pyproject.toml
+│   ├── pyproject.toml             # requires-python >=3.12, deps: betterproto2[grpclib]
+│   ├── uv.lock
 │   ├── src/resoio/
-│   │   ├── __init__.py
-│   │   ├── session.py             # gRPC channel 共有・接続管理
-│   │   ├── camera.py              # ← C# Camera をミラー
-│   │   ├── audio.py               # ← C# Audio をミラー
-│   │   ├── locomotion.py          # ← C# Locomotion をミラー
-│   │   ├── manipulation.py        # ← C# Manipulation をミラー
-│   │   └── _generated/            # protoc 出力 (commit する)
-│   ├── examples/
-│   └── tests/
+│   │   ├── __init__.py            # importlib.metadata で __version__ を露出
+│   │   ├── py.typed
+│   │   ├── session.py             # placeholder (Step 2 で SessionClient 実装)
+│   │   └── _generated/            # protoc 出力 (commit)
+│   │       └── resonite_io/v1/
+│   └── tests/resoio/
 │
 ├── scripts/
-│   ├── setup_ubuntu.sh            # 全依存を一発インストール
-│   ├── gen_proto.sh               # .proto → C#/Python コード生成
-│   └── deploy_mod.sh              # ビルド → BepInEx/plugins/ にコピー
+│   ├── gen_proto.sh               # .proto → Python コード生成 (C# 側は csproj が build-time に生成)
+│   ├── decompile.sh               # ilspycmd で Resonite first-party DLL を decompiled/ に展開
+│   ├── container-init.sh          # /workspace への bootstrap + 依存解決
+│   └── lib.sh                     # 共通シェルユーティリティ
 │
-├── docs/
-├── .github/workflows/
+├── decompiled/                    # ILSpy 出力 (gitignore、`just decompile` で再生成)
+├── .claude/                       # Claude Code 規約 + memory
+├── .github/workflows/             # (未整備)
 └── README.md
 ```
 
 ### D. ビルド・デプロイサイクル
 
-| スクリプト              | 役割                                                                    |
-| ----------------------- | ----------------------------------------------------------------------- |
-| `scripts/setup.sh`      | 任意の Linux で .NET SDK / protoc / uv / Python deps を一発インストール |
-| `scripts/gen_proto.sh`  | `.proto` から C# / Python の両側コードを生成                            |
-| `scripts/deploy_mod.sh` | `dotnet build` → `.dll` を Resonite の plugins ディレクトリへ           |
+| 経路                          | 役割                                                                              |
+| ----------------------------- | --------------------------------------------------------------------------------- |
+| `just container-build`        | 開発 image をビルド (debian + .NET 10 SDK + uv + protoc + dotnet local tools)     |
+| `just container-up` / `-init` | サービス起動 + `/workspace` への bootstrap                                        |
+| `just gen-proto`              | Python 側コード生成 (C# は csproj `<Protobuf>` で build-time 生成)                |
+| `just deploy-mod`             | `dotnet build` → csproj の PostBuild Target で `$(ResonitePath)/BepInEx/plugins/` |
+| `just decompile`              | ILSpy で Resonite アセンブリを project 形式で `decompiled/` に展開                |
+| `just mod-pack`               | `dotnet build -t:PackTS` で Thunderstore zip を `mod/build/` に生成               |
 
 Python 側は `uv sync` で editable install 含めて完結。
 
@@ -197,16 +212,22 @@ ______________________________________________________________________
 - ✅ Python パッケージマネージャ: `uv`
 - ✅ IPC: gRPC over Unix Domain Socket
 - ✅ Python gRPC スタック: `betterproto2` + `grpclib` (async)
-  - Python 3.10+ 必須
-  - `pip install "betterproto2[grpclib,compiler]"`
+  - **Python 3.12+ 必須** (`python/pyproject.toml` の `requires-python` と pyright `pythonVersion` で固定)
+  - 依存は `betterproto2[grpclib]`。**`betterproto2_compiler` は別 distribution として配布されており `[compiler]` extra は存在しない** (PyPI metadata 2026-05 で確認済み)。dev グループに固定し、`uv run protoc --python_betterproto2_out=...` で呼び出す
   - 生成コードは Python dataclass + type hints ネイティブで pyright strict をそのまま通る想定
 - ✅ C# / Python のモジュール構造はモダリティ単位でミラーリング
 - ✅ 各モダリティは独立非同期ストリーム (RL `step()` なし)
 - ✅ ワールド非依存・単一ユーザー操作スコープ
 - ✅ 通信データ型は pyright strict 準拠
-- ✅ `setup.sh` は Linux ディストロ非依存 (公式バイナリインストーラ優先)
+- ✅ **開発環境は Docker 化** (`debian:bookworm-slim` ベース単一 image)。ホストには `docker` / `docker compose v2` / `just` の 3 つだけ要求。当初想定していた `setup.sh` は廃止
 - ✅ 補助ツール: ライセンス MIT、formatter (csharpier / ruff)、type-check (pyright strict)、test (xunit / pytest)
 - ✅ **C# Linter/Analyzer**: csharpier + Roslyn analyzers + `Nullable=enable` + `TreatWarningsAsErrors=true` (StyleCop は不採用)
+- ✅ **C# Mod SDK**: `Microsoft.NET.Sdk` + BepisLoader 公式 Template の NuGet 群 (`BepInEx.ResonitePluginInfoProps` / `ResoniteModding.BepInExResoniteShim` / `ResoniteModding.BepisResoniteWrapper`)。当初検討した `Remora.Resonite.Sdk` は不採用
+- ✅ **C# 側 proto 生成**: `Grpc.Tools` の `<Protobuf>` ItemGroup で `dotnet build` 時に自動生成 (Server スタブのみ)。`gen_proto.sh` は Python 側のみを扱う
+- ✅ **dotnet local tools** (`.config/dotnet-tools.json`): `csharpier` / `tcli` / `ilspycmd`。global tool + PATH 操作は採らない
+- ✅ **proto lint**: `buf` (`buf.yaml`、`SERVICE_SUFFIX` は除外)
+- ✅ **mod deploy**: csproj の PostBuild Target が `$(ResonitePath)/BepInEx/plugins/ResoniteIO/` に Copy する一本化。`scripts/deploy_mod.sh` は廃止
+- ✅ **mod 配布**: Thunderstore zip を `dotnet build -t:PackTS` (`tcli` ラップ) で生成
 - ✅ **proto スキーマは Step ごとに incremental に詰める** (Step 1 で `session.proto`、Step 3 で `camera.proto`、…)
 - ✅ **BepInEx PluginGuid**: `net.mlshukai.resonite-io`
 
@@ -214,16 +235,21 @@ ______________________________________________________________________
 
 ## 6. 今後のステップ
 
-### Step 1: スケルトン構築
+### Step 1: スケルトン構築 — **完了**
 
-- BepisLoader mod として最小構成で起動確認
-- `Engine.Current.WorldManager.FocusedWorld` から `LocalUser` を引いて Console にログ出力
+- [x] BepisLoader mod として最小構成で起動確認 (`mod/src/ResoniteIO/ResoniteIOPlugin.cs` — `BasePlugin.Load()` で `ResoniteHooks.OnEngineReady` を購読し起動ログを出力)
+- [x] Python `resoio` パッケージのスケルトン (`session.py` は placeholder、`_generated/` に空の package marker、`__version__` は `importlib.metadata` 経由)
+- [x] `proto/resonite_io/v1/session.proto` (Ping RPC) を追加
+- [x] xunit smoke test (`mod/tests/ResoniteIO.Tests/`) + pytest scaffolding (`python/tests/resoio/`)
+- [x] モダリティ別ディレクトリの `.gitkeep` を C# / Python 両側に配置 (Camera / Audio / Locomotion / Manipulation / Session)
+- [ ] `Engine.Current.WorldManager.FocusedWorld` から `LocalUser` を引いて Console にログ出力 (Step 2 と合わせて実装する)
 
-### Step 2: gRPC Session
+### Step 2: gRPC Session — **次に着手**
 
 - C# 側で gRPC サーバ起動 (UDS bind)、別スレッドで動作
 - Python 側から `Session.Ping` RPC が通ることを確認
 - セッション管理 (接続/切断)
+- Step 1 の宿題である `FocusedWorld` / `LocalUser` の取得もこの Step でカバーする
 
 ### Step 3: Camera モジュール
 

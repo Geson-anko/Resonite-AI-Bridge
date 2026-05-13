@@ -18,25 +18,53 @@
 
 ## プロジェクト状況
 
-**現状: 計画フェーズ完了直後。実装は Step 0 (環境構築) から開始する**。リポジトリには `.claude/` 配下のドキュメントと `LICENSE` のみ存在し、`mod/` / `python/` / `proto/` / `scripts/` / `justfile` はまだない。
+**現状: Step 0 (Docker 化された開発環境構築) と Step 1 (mod / python / proto のスケルトン) が完了。次は Step 2 (gRPC `Session.Ping` の C# サーバ実装 + Python クライアント接続)**。
 
-予定しているモノレポ構造は以下（[.claude/resonite_io_plan.md §3.C](.claude/resonite_io_plan.md) と一致させること）:
+実装済みの主要要素:
 
-```
+- 開発環境: `Dockerfile` / `docker-compose.yml` / `justfile` / `scripts/container-init.sh`
+- C# Mod: `mod/src/ResoniteIO/ResoniteIOPlugin.cs` (BasePlugin で `ResoniteHooks.OnEngineReady` を購読してログ出力するのみ)
+- Python: `python/src/resoio/session.py` は **placeholder**（`PLACEHOLDER` 定数のみ。Step 2 で `SessionClient` に差し替え）
+- proto: `proto/resonite_io/v1/session.proto` のみ (`Ping` RPC)。他モダリティの proto は後続 Step で追加
+- 補助スクリプト: `scripts/gen_proto.sh` (Python 生成専用) / `scripts/decompile.sh` (ilspycmd) / `scripts/lib.sh`
+- proto lint: `buf.yaml` (`SERVICE_SUFFIX` 除外)
+- mod Thunderstore packaging: `thunderstore.toml` + `tcli` local tool + `dotnet build -t:PackTS`
+
+リポジトリ実構造:
+
+```text
 resonite-io/
-├── justfile                 # ルートタスクランナー (C# + Python + proto を一括)
-├── proto/                   # 単一の真実: .proto 定義
-│   └── resonite_io/v1/{session,camera,audio,locomotion,manipulation}.proto
-├── mod/                     # C# 側 (BepisLoader mod, .NET 10)
+├── Dockerfile                 # 開発コンテナ image (debian + .NET 10 + uv + protoc)
+├── docker-compose.yml         # dev サービス定義 (host UID/GID 一致 / ResonitePath bind)
+├── justfile                   # ルートタスクランナー
+├── buf.yaml                   # proto lint/breaking 設定
+├── .pre-commit-config.yaml
+├── .env.example               # `.env` の雛形 (ResonitePath 等)
+├── proto/                     # 単一の真実: .proto 定義
+│   └── resonite_io/v1/session.proto   # 他モダリティ proto は Step 3+ で追加
+├── mod/                       # C# 側 (BepisLoader mod, .NET 10)
 │   ├── ResoniteIO.sln
-│   ├── src/ResoniteIO/{Session,Camera,Audio,Locomotion,Manipulation}/
-│   └── tests/
-├── python/                  # Python 側 (uv + betterproto2 + grpclib)
-│   ├── pyproject.toml
-│   └── src/resoio/{session,camera,audio,locomotion,manipulation}.py
-│       └── _generated/      # protoc 出力 (commit する)
-├── scripts/{setup.sh, gen_proto.sh}
-└── docs/  .github/workflows/  README.md
+│   ├── Directory.Build.{props,targets}
+│   ├── NuGet.config / thunderstore.toml / icon.png
+│   ├── src/ResoniteIO/
+│   │   ├── ResoniteIO.csproj
+│   │   ├── ResoniteIOPlugin.cs        # BasePlugin + OnEngineReady フック
+│   │   └── {Session,Camera,Audio,Locomotion,Manipulation}/   # .gitkeep のみ
+│   └── tests/ResoniteIO.Tests/        # xunit smoke test
+├── python/                    # Python 側 (uv + betterproto2 + grpclib)
+│   ├── pyproject.toml         # requires-python >=3.12
+│   ├── uv.lock
+│   ├── src/resoio/
+│   │   ├── __init__.py        # importlib.metadata で __version__
+│   │   ├── py.typed
+│   │   ├── session.py         # ← Step 2 で実装に差し替える placeholder
+│   │   └── _generated/        # protoc 出力 (commit する)
+│   └── tests/resoio/
+├── scripts/{gen_proto.sh, decompile.sh, container-init.sh, lib.sh}
+├── decompiled/                # ILSpy 出力 (gitignore、`just decompile` で再生成)
+├── .claude/                   # 規約・memory (本ファイル / resonite_io_plan.md / agents/)
+├── .github/workflows/         # (未整備)
+└── README.md
 ```
 
 C# 側のモジュール構造と Python 側のモジュール構造は **モダリティ単位でミラーリング** する（plan §5 決定事項）。新しいモダリティを追加するときは両側に同名の単位を切ること。
@@ -71,18 +99,19 @@ C# 側のモジュール構造と Python 側のモジュール構造は **モダ
 以下も **コンテナ内に閉じている**。host へのインストールは不要。
 
 - パッケージ・環境管理: `uv`（ロックファイル `python/uv.lock` をコミット）
-- Python: **`>=3.10`** 必須 (betterproto2 の要件)
-- gRPC スタック: **`betterproto2` + `grpclib`** (async)。`pip install "betterproto2[grpclib,compiler]"`、生成コードは Python dataclass + type hints ネイティブで pyright strict をそのまま通す想定
+- Python: **`>=3.12`** 必須 (`python/pyproject.toml` の `requires-python` と pyright の `pythonVersion` で固定)
+- gRPC スタック: **`betterproto2` + `grpclib`** (async)。依存は `betterproto2[grpclib]`。**`betterproto2_compiler` は別 distribution で配布されており `[compiler]` extra は存在しない** (PyPI metadata 2026-05 で確認済み)。dev グループに固定し `uv run protoc` から呼ぶ。生成コードは Python dataclass + type hints ネイティブで pyright strict をそのまま通す想定
 - 型チェッカー: `pyright` を `python/src/` に対し **strict** モードで実行（`tests/` は除外）
 - リンター/フォーマッター: `ruff`（line-length 88、ダブルクォート、isort + `combine-as-imports`）
-- テスト: `pytest`
-- pre-commit: ruff、pyupgrade (`--py310-plus`)、docformatter、mdformat、codespell、`uv-lock`、pygrep checks
+- テスト: `pytest` (+ `pytest-asyncio` / `pytest-cov` / `pytest-mock`)
+- pre-commit: ruff、pyupgrade、docformatter、mdformat、codespell、`uv-lock`、pygrep checks、shellcheck、shfmt
 
 ### proto
 
 - スキーマファイル: `proto/resonite_io/v1/*.proto`
-- 生成: `just gen-proto` (内部で `scripts/gen_proto.sh`) で C# / Python の両側を出力。**コンテナ内で実行する**
-- Python 側出力は `python/src/resoio/_generated/` に書き、commit する
+- C# 側生成は `mod/src/ResoniteIO/ResoniteIO.csproj` の `<Protobuf>` ItemGroup により **`dotnet build` 時に `Grpc.Tools` が自動生成** する (Server スタブのみ、`obj/` に出力するため commit しない)
+- Python 側生成は `just gen-proto` (内部で `scripts/gen_proto.sh`) で `python/src/resoio/_generated/` に書き、commit する。**コンテナ内で実行する**
+- proto lint: `buf` (`buf.yaml`)。`SERVICE_SUFFIX` は除外 (service 名はモダリティ名そのもの)
 - スキーマは **Step ごとに incremental に詰める**（plan §5）
 
 ### Docker 開発環境
@@ -101,24 +130,25 @@ C# 側のモジュール構造と Python 側のモジュール構造は **モダ
 
 `just` レシピを使う（`uv run` / `dotnet` / `protoc` をラップ）。具体的な recipe は `justfile` を実装するときに固める想定だが、最低限以下の名前を提供する:
 
-| レシピ                 | 役割                                                                                                                                                        |
-| ---------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `just gen-proto`       | `scripts/gen_proto.sh` で `.proto` から C# / Python の両側コードを生成                                                                                      |
-| `just deploy-mod`      | `just mod-build` を呼び、csproj の PostBuild Target 経由で `$(ResonitePath)/BepInEx/plugins/ResoniteIO/` に DLL+PDB を配置 (ResonitePath 未設定なら exit 1) |
-| `just mod-pack`        | `dotnet build -c Release -t:PackTS` で Thunderstore 配布用 zip を `mod/build/` に生成                                                                       |
-| `just format`          | C# (`csharpier`) と Python (`ruff format` + `ruff check --fix`) を両方走らせる                                                                              |
-| `just test`            | C# (`dotnet test`) と Python (`pytest -v --cov`) を両方走らせる                                                                                             |
-| `just type`            | Python の `pyright` を `python/src/` に対し strict 実行                                                                                                     |
-| `just build`           | C# mod を `dotnet build -c Release`                                                                                                                         |
-| `just run`             | `format` → `gen-proto` (proto に変更があれば) → `build` → `test` → `type` を直列実行                                                                        |
-| `just clean`           | `clean-py` と `mod-clean` を実行                                                                                                                            |
-| `just mod-clean`       | `mod/{bin,obj,build}` を削除し、`$(ResonitePath)/BepInEx/plugins/ResoniteIO/` も撤去                                                                        |
-| `just container-build` | Docker image をビルド (debian + .NET 10 SDK + uv + protoc + dotnet tools)                                                                                   |
-| `just container-up`    | サービスをバックグラウンド起動 (host 側に plugins ディレクトリも mkdir)                                                                                     |
-| `just container-init`  | `/workspace` volume へ host repo を bootstrap copy + 依存解決                                                                                               |
-| `just container-shell` | コンテナ内 bash に attach (`/workspace` カレント)                                                                                                           |
-| `just container-down`  | サービス停止 (volume は保持)                                                                                                                                |
-| `just container-clean` | image / volume / network 完全削除 (destructive)                                                                                                             |
+| レシピ                 | 役割                                                                                                                                               |
+| ---------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `just gen-proto`       | `scripts/gen_proto.sh` で `.proto` から Python 側コードを生成 (C# 側は csproj の `<Protobuf>` が build-time に生成するためノータッチ)              |
+| `just decompile`       | `scripts/decompile.sh` で Resonite first-party DLL を ILSpy (`ilspycmd`) で project 形式で `decompiled/` に展開。`.env` の `ResonitePath` 必須     |
+| `just deploy-mod`      | `just mod-build` を呼び、csproj の PostBuild Target 経由で `$(ResonitePath)/BepInEx/plugins/ResoniteIO/` に DLL+PDB を配置 (DLL 未配置なら exit 1) |
+| `just mod-pack`        | `dotnet build -c Release -t:PackTS` で Thunderstore 配布用 zip を `mod/build/` に生成 (`tcli` ラップ)                                              |
+| `just format`          | C# (`csharpier`) と Python (`ruff format` + `ruff check --fix`) を両方走らせる                                                                     |
+| `just test`            | C# (`dotnet test`) と Python (`pytest -v --cov`) を両方走らせる                                                                                    |
+| `just type`            | Python の `pyright` を `python/src/` に対し strict 実行                                                                                            |
+| `just build`           | C# mod を `dotnet build -c Release`                                                                                                                |
+| `just run`             | `format` → `gen-proto` → `build` → `test` → `type` を直列実行                                                                                      |
+| `just clean`           | `clean-py` と `mod-clean` を実行                                                                                                                   |
+| `just mod-clean`       | `mod/{bin,obj,build}` を削除し、`$(ResonitePath)/BepInEx/plugins/ResoniteIO/` も撤去                                                               |
+| `just container-build` | Docker image をビルド (debian + .NET 10 SDK + uv + protoc + dotnet local tools)。`--no-cache` 固定                                                 |
+| `just container-up`    | サービスをバックグラウンド起動 (host 側に plugins ディレクトリも mkdir、`ResonitePath` 未設定なら fail)                                            |
+| `just container-init`  | `/workspace` volume へ host repo を bootstrap copy + 依存解決 (`dotnet tool restore` + `uv sync`)                                                  |
+| `just container-shell` | コンテナ内 bash に attach (`/workspace` カレント)                                                                                                  |
+| `just container-down`  | サービス停止 (volume は保持)                                                                                                                       |
+| `just container-clean` | image / volume / network 完全削除 (destructive)                                                                                                    |
 
 サブコマンド分離が必要な場合の補助レシピ:
 
@@ -151,7 +181,7 @@ C# 側のモジュール構造と Python 側のモジュール構造は **モダ
 
 ### Renderite IPC のドキュメント不足
 
-Camera readback の実装は **decompile を読みながら**進める前提（plan §7 リスク）。手探りになる箇所はその場の発見をコメントでは残さず、`.claude/memory/` に feedback として残すこと。
+Camera readback の実装は **decompile を読みながら**進める前提（plan §7 リスク）。`just decompile` で `decompiled/` 配下に Resonite first-party DLL を ILSpy (`ilspycmd`) で project 形式に展開できる (gitignore 済み)。手探りになる箇所はその場の発見をコメントでは残さず、`.claude/memory/` に feedback として残すこと。
 
 ### ライセンス・ToS
 
