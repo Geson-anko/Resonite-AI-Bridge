@@ -99,36 +99,31 @@ clean-py:
 
 # ===== Container ============================================================
 
-# host UID/GID を全 docker compose 呼び出しに env として伝える (build args / interpolation
-# 警告対策)。export 付きの just 変数は全レシピに環境変数として注入される。
+# docker-compose.yml の ${HOST_UID} / ${HOST_GID} 解釈に必要。export 付きの just 変数は
+# 全レシピに環境変数として注入される。
 export HOST_UID := `id -u`
 export HOST_GID := `id -g`
 
-# Docker image をビルド (debian + .NET 10 + uv + protoc; UID/GID は host 一致)
 container-build:
     docker compose build --no-cache
 
-# サービスをバックグラウンド起動 (sleep infinity で常駐)
-# bind マウント先のディレクトリを host 側で先に作って root 所有事故を防ぐ
-# ResonitePath が未設定だとルート直下に mkdir してしまうため明示エラー
+# bind マウント先を host 側で先に作っておく (Docker 任せだと root 所有で作られる)。
+# ResonitePath 未設定だとルート直下に mkdir してしまうため事前に明示失敗させる。
 container-up:
     @: "${ResonitePath:?ResonitePath が未設定です。.env に Resonite 実行ディレクトリを設定してください。}"
     @mkdir -p "${ResonitePath}/BepInEx/plugins/ResoniteIO"
     docker compose up -d
 
-# サービス停止 (volume は残す)
 container-down:
     docker compose down
 
-# 初期化: ホスト repo を /workspace volume へ bootstrap copy + 依存解決
-# 既に内容があれば --force で上書き
+# /workspace volume へ host repo を bootstrap copy + 依存解決。--force で再実行可能。
 container-init *ARGS:
     docker compose exec dev bash /source/scripts/container-init.sh {{ARGS}}
 
-# コンテナ内 shell に attach (bash, /workspace カレント)
 container-shell:
     docker compose exec dev bash
 
-# Docker image / volumes / ネットワークを完全削除 (work データも消える, destructive)
+# 完全削除 (named volume の作業内容も消える, destructive)。
 container-clean:
     docker compose down -v --rmi local --remove-orphans
