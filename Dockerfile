@@ -32,6 +32,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
         xz-utils \
         rsync \
         bash-completion \
+        libatomic1 \
         libicu72 \
         shellcheck \
         shfmt \
