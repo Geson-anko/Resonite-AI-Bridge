@@ -72,12 +72,8 @@
       "Bash(csharpier:*)",
       "Bash(protoc:*)",
       "Bash(protoc --version:*)",
-      "Bash(scripts/setup.sh:*)",
       "Bash(scripts/gen_proto.sh:*)",
-      "Bash(scripts/deploy_mod.sh:*)",
-      "Bash(./scripts/setup.sh:*)",
       "Bash(./scripts/gen_proto.sh:*)",
-      "Bash(./scripts/deploy_mod.sh:*)",
       "Bash(bash scripts/*)",
       "WebSearch",
       "WebFetch",
@@ -88,7 +84,9 @@
       "Bash(dotnet ilspycmd *)",
       "Bash(shellcheck *)",
       "Bash(uvx *)",
-      "Bash(pre-commit run *)"
+      "Bash(pre-commit run *)",
+      "Bash(shfmt *)",
+      "Bash(command *)"
     ],
     "deny": [
       "Bash(git push:*)",

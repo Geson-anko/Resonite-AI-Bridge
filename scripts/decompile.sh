@@ -68,7 +68,7 @@ ASSEMBLIES=(
 # ===== END EDIT THIS ========================================================
 
 main() {
-  have dotnet || die "dotnet が見つかりません。scripts/setup.sh を先に実行してください。"
+  have dotnet || die "dotnet が見つかりません。Docker 開発環境 (just container-up) を使うか、ホストに .NET SDK を入れてください。"
 
   if [[ ! -d "$RESONITE_DIR" ]]; then
     die "Resonite ディレクトリが見つかりません: $RESONITE_DIR

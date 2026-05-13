@@ -1,0 +1,49 @@
+# Docker Compose 開発環境定義。
+#
+# - `name: resonite-io-${USER}` でプロジェクト・コンテナ・volume を ${USER}
+#   名前空間化し、同一ホストで複数ユーザーが衝突せず共存できるようにする。
+# - host 側 ${ResonitePath} (Resonite 実行ディレクトリ) を 2 段重ねで bind し、
+#   compose 内では `environment: ResonitePath: /resonite` で上書きする。
+#     1. /resonite に ro bind: FrooxEngine.dll 等の HintPath 参照用
+#     2. /resonite/BepInEx/plugins/ResoniteIO に rw bind: PostBuild Copy 先
+#   ro 親 + rw 子の重ね bind は Linux Docker 限定の挙動。順序は親→子。
+# - ${HOST_UID} / ${HOST_GID} は justfile の container-* レシピが
+#   `id -u` / `id -g` から動的に注入する。.env には書かない。
+
+name: resonite-io-${USER}
+
+services:
+  dev:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      args:
+        USER_UID: ${HOST_UID}
+        USER_GID: ${HOST_GID}
+    image: resonite-io-dev:${USER}
+    container_name: resonite-io-dev-${USER}
+    hostname: resonite-io-dev
+    working_dir: /workspace
+    command: ["sleep", "infinity"]
+    env_file: .env
+    environment:
+      ResonitePath: /resonite
+    init: true
+    stdin_open: true
+    tty: true
+    volumes:
+      - workspace:/workspace
+      - ./:/source:ro
+      - ${ResonitePath}:/resonite:ro
+      - ${ResonitePath}/BepInEx/plugins/ResoniteIO:/resonite/BepInEx/plugins/ResoniteIO:rw
+      # NuGet / uv の既定キャッシュパスにマウントするため、コンテナ側で追加 ENV は不要。
+      - cache-nuget:/home/dev/.nuget
+      - cache-uv:/home/dev/.cache/uv
+
+volumes:
+  workspace:
+    name: resonite-io-workspace-${USER}
+  cache-nuget:
+    name: resonite-io-cache-nuget-${USER}
+  cache-uv:
+    name: resonite-io-cache-uv-${USER}

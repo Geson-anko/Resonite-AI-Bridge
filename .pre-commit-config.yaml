@@ -32,9 +32,8 @@ repos:
     hooks:
       - id: uv-lock
 
-  # ruff: scripts/setup.sh で uv が入っている前提で `uvx ruff` 経由で実行する。
-  # 公式 ruff-pre-commit を使わず local hook にしているのは、開発環境と CI で
-  # 同じ ruff バージョン解決を uv に一本化するため。
+  # 公式 ruff-pre-commit を使わず local hook + `uvx ruff` にしているのは、開発環境と
+  # CI で同じ ruff バージョン解決を uv に一本化するため。
   - repo: local
     hooks:
       - id: ruff-check
@@ -100,9 +99,9 @@ repos:
           - --skip=*.ipynb**
 
   # ===== C# =====
-  # csharpier は `.config/dotnet-tools.json` の **local tool** として管理。
-  # `scripts/setup.sh` が `dotnet tool restore` で解決する。`dotnet csharpier`
-  # で manifest 経由に呼び出されるため、`~/.dotnet/tools/` を PATH に通す必要は無い。
+  # csharpier は `.config/dotnet-tools.json` の **local tool** として管理し、
+  # `dotnet csharpier` で manifest 経由に呼び出すため `~/.dotnet/tools/` を PATH に
+  # 通す必要は無い (restore は container-init.sh で実施)。
   - repo: local
     hooks:
       - id: csharpier
@@ -113,27 +112,32 @@ repos:
         pass_filenames: true
 
   # ===== Shell =====
-  # shellcheck: 静的解析 (バグ検出)。-x で source 先 (lib.sh) も follow
-  - repo: https://github.com/shellcheck-py/shellcheck-py
-    rev: v0.11.0.1
+  # shellcheck / shfmt は Dockerfile で apt 経由 install 済み。コンテナ内開発の
+  # 一貫性のため pre-commit からも system binary を直接呼ぶ (upstream の
+  # shellcheck-py / pre-commit-shfmt は使わず、bash hook と同様 language: system)。
+  - repo: local
     hooks:
       - id: shellcheck
-        args: [-x]
-
-  # shfmt: フォーマッタ
-  #   -w   in-place 書き換え
-  #   -i 2 2-space indent
-  #   -ci  case 文を 1 段 indent
-  #   -bn  binary op を行頭側に
-  - repo: https://github.com/scop/pre-commit-shfmt
-    rev: v3.12.0-2
-    hooks:
+        name: shellcheck
+        # -x: source 先 (lib.sh) も follow
+        entry: shellcheck -x
+        language: system
+        types: [shell]
+        require_serial: true
       - id: shfmt
-        args: [-w, -i, "2", -ci, -bn]
+        name: shfmt
+        #   -w   in-place 書き換え
+        #   -i 2 2-space indent
+        #   -ci  case 文を 1 段 indent
+        #   -bn  binary op を行頭側に
+        entry: shfmt -w -i 2 -ci -bn
+        language: system
+        types: [shell]
+        require_serial: true
 
   # ===== Protobuf =====
   # bufbuild/buf の hooks は language: golang なので buf binary は pre-commit が
-  # 自動 install する (setup.sh への追加不要)。buf-breaking はベースライン参照が
+  # 自動 install する (別途インストール不要)。buf-breaking はベースライン参照が
   # 必要なため CI 側で別途実行する想定で、ここでは入れない。
   - repo: https://github.com/bufbuild/buf
     rev: v1.69.0

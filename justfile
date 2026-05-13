@@ -7,10 +7,6 @@ default:
 
 # ===== 環境構築 =========================================================
 
-# scripts/setup.sh で .NET / uv / protoc / just / csharpier / pre-commit を一括導入。
-setup:
-    bash scripts/setup.sh
-
 # proto から Python 側の生成コードを再生成する。C# 側は dotnet build で自動生成。
 gen-proto:
     bash scripts/gen_proto.sh
@@ -100,3 +96,34 @@ clean-py:
     rm -rf python/.coverage
     find python -type d -name '__pycache__' -prune -exec rm -rf {} +
     find python -type d -name '*.egg-info' -prune -exec rm -rf {} +
+
+# ===== Container ============================================================
+
+# docker-compose.yml の ${HOST_UID} / ${HOST_GID} 解釈に必要。export 付きの just 変数は
+# 全レシピに環境変数として注入される。
+export HOST_UID := `id -u`
+export HOST_GID := `id -g`
+
+container-build:
+    docker compose build --no-cache
+
+# bind マウント先を host 側で先に作っておく (Docker 任せだと root 所有で作られる)。
+# ResonitePath 未設定だとルート直下に mkdir してしまうため事前に明示失敗させる。
+container-up:
+    @: "${ResonitePath:?ResonitePath が未設定です。.env に Resonite 実行ディレクトリを設定してください。}"
+    @mkdir -p "${ResonitePath}/BepInEx/plugins/ResoniteIO"
+    docker compose up -d
+
+container-down:
+    docker compose down
+
+# /workspace volume へ host repo を bootstrap copy + 依存解決。--force で再実行可能。
+container-init *ARGS:
+    docker compose exec dev bash /source/scripts/container-init.sh {{ARGS}}
+
+container-shell:
+    docker compose exec dev bash
+
+# 完全削除 (named volume の作業内容も消える, destructive)。
+container-clean:
+    docker compose down -v --rmi local --remove-orphans
