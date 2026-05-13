@@ -61,15 +61,15 @@ RUN set -eux; \
     /tmp/dotnet-install.sh --channel "${DOTNET_CHANNEL}" --install-dir /usr/local/dotnet; \
     rm -f /tmp/dotnet-install.sh
 
-# Tab completion を /etc/bash_completion.d/ に流し込む。dotnet completions は SDK バージョンに
-# よって無いことがあるので失敗許容。bookworm-slim の /etc/bash.bashrc は bash-completion
-# ローダ部がコメントアウトされているので明示的に有効化する (`docker exec dev bash` は非 login
-# 対話 shell で /etc/profile.d/bash_completion.sh が読まれないため)。
+# Tab completion を /etc/bash_completion.d/ に流し込む。dotnet は SDK バージョンによって
+# `dotnet completions` のサブコマンド仕様が動くため対象外 (必要になれば dotnet-suggest を別途検討)。
+# bookworm-slim の /etc/bash.bashrc は bash-completion ローダ部がコメントアウトされている
+# ので明示的に有効化する (`docker exec dev bash` は非 login 対話 shell で
+# /etc/profile.d/bash_completion.sh が読まれないため)。
 RUN set -eux; \
     uv generate-shell-completion bash > /etc/bash_completion.d/uv; \
     uvx --generate-shell-completion bash > /etc/bash_completion.d/uvx; \
     just --completions bash > /etc/bash_completion.d/just; \
-    (dotnet completions bash > /etc/bash_completion.d/dotnet 2>/dev/null || true); \
     echo '[ -f /usr/share/bash-completion/bash_completion ] && . /usr/share/bash-completion/bash_completion' \
       >> /etc/bash.bashrc
 
