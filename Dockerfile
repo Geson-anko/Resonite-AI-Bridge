@@ -24,6 +24,7 @@ ENV DOTNET_NOLOGO=1
 # 最小限のシステム依存。python3 / build-essential は入れない (uv が独自 Python を引く)。
 # libicu72 は .NET SDK の globalization 初期化に必要 (bookworm-slim には含まれない)。
 # shellcheck / shfmt は scripts/ の lint 用 (pre-commit からも system binary として呼ばれる)。
+# sudo は dev ユーザーから apt-get などを叩くため。NOPASSWD で透過運用 (後段)。
 RUN apt-get update && apt-get install -y --no-install-recommends \
         git \
         curl \
@@ -36,6 +37,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
         libicu72 \
         shellcheck \
         shfmt \
+        sudo \
  && rm -rf /var/lib/apt/lists/*
 
 # ツール一式を /usr/local 配下に固定。1 RUN にまとめてレイヤを抑える。
@@ -71,10 +73,13 @@ RUN set -eux; \
 # /workspace, /home/dev/.nuget/packages, /home/dev/.cache/uv を image 内に dev 所有で
 # 用意することで、Docker が初回マウント時にディレクトリ属性を継承し named volume が
 # dev 所有で初期化される (root 所有事故の予防)。
+# NOPASSWD sudo を付与: host UID 一致を保ちつつ `sudo apt-get ...` 等の特権操作を可能に。
 RUN groupadd -g ${USER_GID} dev \
  && useradd -m -u ${USER_UID} -g ${USER_GID} -s /bin/bash dev \
  && mkdir -p /workspace /home/dev/.nuget/packages /home/dev/.cache/uv \
- && chown -R dev:dev /workspace /home/dev
+ && chown -R dev:dev /workspace /home/dev \
+ && echo 'dev ALL=(ALL) NOPASSWD: ALL' > /etc/sudoers.d/dev \
+ && chmod 0440 /etc/sudoers.d/dev
 
 USER dev
 WORKDIR /workspace
