@@ -10,6 +10,7 @@
 #   4. dotnet tool restore で .config/dotnet-tools.json を解決
 #   5. python/ で uv sync --all-extras を実行
 #   6. (best-effort) pre-commit install --install-hooks
+#   7. ~/.claude/settings.json を /workspace/.claude/settings.container.json への symlink にする
 #
 # このスクリプトは bind 経由で /source/scripts/container-init.sh として実行されるため、
 # rsync 前は /workspace/scripts/lib.sh が存在しない。よって lib.sh は **/source 側**を
@@ -116,6 +117,19 @@ install_pre_commit_hooks() {
   fi
 }
 
+# ===== 7. ~/.claude/settings.json を repo の container 用 settings に symlink =====
+link_claude_settings() {
+  local target="$WORKSPACE_DIR/.claude/settings.container.json"
+  local link="$HOME/.claude/settings.json"
+  if [[ ! -f "$target" ]]; then
+    warn "$target が無いため Claude Code 設定の symlink は skip。"
+    return
+  fi
+  mkdir -p "$(dirname "$link")"
+  ln -sfn "$target" "$link"
+  log "Linked $link → $target"
+}
+
 main() {
   log "Bootstrapping /workspace from /source (force=$FORCE)"
   check_source
@@ -124,6 +138,7 @@ main() {
   restore_dotnet_tools
   sync_python
   install_pre_commit_hooks
+  link_claude_settings
   log "Done. 'just --list' で利用可能レシピを確認してください。"
 }
 
