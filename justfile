@@ -99,13 +99,14 @@ clean-py:
 
 # ===== Container ============================================================
 
-# host UID/GID を compose に渡すための共通変数
-HOST_UID := `id -u`
-HOST_GID := `id -g`
+# host UID/GID を全 docker compose 呼び出しに env として伝える (build args / interpolation
+# 警告対策)。export 付きの just 変数は全レシピに環境変数として注入される。
+export HOST_UID := `id -u`
+export HOST_GID := `id -g`
 
 # Docker image をビルド (debian + .NET 10 + uv + protoc; UID/GID は host 一致)
 container-build:
-    HOST_UID={{HOST_UID}} HOST_GID={{HOST_GID}} docker compose build --no-cache
+    docker compose build --no-cache
 
 # サービスをバックグラウンド起動 (sleep infinity で常駐)
 # bind マウント先のディレクトリを host 側で先に作って root 所有事故を防ぐ
@@ -113,7 +114,7 @@ container-build:
 container-up:
     @: "${ResonitePath:?ResonitePath が未設定です。.env に Resonite 実行ディレクトリを設定してください。}"
     @mkdir -p "${ResonitePath}/BepInEx/plugins/ResoniteIO"
-    HOST_UID={{HOST_UID}} HOST_GID={{HOST_GID}} docker compose up -d
+    docker compose up -d
 
 # サービス停止 (volume は残す)
 container-down:
