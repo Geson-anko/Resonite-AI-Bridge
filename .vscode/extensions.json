@@ -1,0 +1,29 @@
+{
+  "recommendations": [
+    "anthropic.claude-code",
+
+    "nefrob.vscode-just-syntax",
+
+    "ms-python.python",
+    "ms-python.vscode-pylance",
+    "charliermarsh.ruff",
+
+    "ms-dotnettools.csharp",
+    "ms-dotnettools.csdevkit",
+    "csharpier.csharpier-vscode",
+
+    "tamasfe.even-better-toml",
+
+    "ms-azuretools.vscode-docker",
+    "ms-azuretools.vscode-containers",
+
+    "bufbuild.vscode-buf",
+    "drblury.protobuf-vsc",
+
+    "redhat.vscode-yaml",
+    "editorconfig.editorconfig",
+    "davidanson.vscode-markdownlint",
+    "streetsidesoftware.code-spell-checker",
+    "mikestead.dotenv"
+  ]
+}
