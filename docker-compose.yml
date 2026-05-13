@@ -32,14 +32,11 @@ services:
     stdin_open: true
     tty: true
     volumes:
-      # 作業ディレクトリ (named volume; dev 所有で初期化される)
       - workspace:/workspace
-      # ホスト repo (bootstrap copy 元)
       - ./:/source:ro
-      # Resonite (ro 親 + rw 子の重ね bind)
       - ${ResonitePath}:/resonite:ro
       - ${ResonitePath}/BepInEx/plugins/ResoniteIO:/resonite/BepInEx/plugins/ResoniteIO:rw
-      # キャッシュ volumes (各ツールのデフォルト path にマウント; カスタム ENV 不要)
+      # NuGet / uv の既定キャッシュパスにマウントするため、コンテナ側で追加 ENV は不要。
       - cache-nuget:/home/dev/.nuget
       - cache-uv:/home/dev/.cache/uv
 
