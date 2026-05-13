@@ -15,10 +15,11 @@ ARG DOTNET_CHANNEL=10.0
 ARG PROTOC_VERSION=29.3
 
 ENV DOTNET_ROOT=/usr/local/dotnet
-ENV PATH=/usr/local/dotnet:/usr/local/bin:$PATH
+ENV HOME=/home/dev
+# $HOME/.local/bin は `uv tool install` の既定インストール先。
+ENV PATH=/usr/local/dotnet:/usr/local/bin:/home/dev/.local/bin:$PATH
 ENV DOTNET_CLI_TELEMETRY_OPTOUT=1
 ENV DOTNET_NOLOGO=1
-ENV HOME=/home/dev
 
 # 最小限のシステム依存。python3 / build-essential は入れない (uv が独自 Python を引く)。
 # libicu72 は .NET SDK の globalization 初期化に必要 (bookworm-slim には含まれない)。
