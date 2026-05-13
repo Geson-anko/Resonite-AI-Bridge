@@ -3,7 +3,7 @@
 このファイルは Thunderstore に同梱されるリリースノート。形式は
 [Keep a Changelog 1.1.0](https://keepachangelog.com/en/1.1.0/) に従う。
 
-## [Unreleased]
+## \[Unreleased\]
 
 ### Added
 
