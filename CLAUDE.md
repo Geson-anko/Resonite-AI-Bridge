@@ -134,6 +134,7 @@ C# 側のモジュール構造と Python 側のモジュール構造は **モダ
 | ---------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `just gen-proto`       | `scripts/gen_proto.sh` で `.proto` から Python 側コードを生成 (C# 側は csproj の `<Protobuf>` が build-time に生成するためノータッチ)              |
 | `just decompile`       | `scripts/decompile.sh` で Resonite first-party DLL を ILSpy (`ilspycmd`) で project 形式で `decompiled/` に展開。`.env` の `ResonitePath` 必須     |
+| `just log`             | host 側で `$(ResonitePath)/BepInEx/LogOutput.log` を `tail -F` で追従 (Resonite 再起動を跨いで再追従)。print-debug の主経路                        |
 | `just deploy-mod`      | `just mod-build` を呼び、csproj の PostBuild Target 経由で `$(ResonitePath)/BepInEx/plugins/ResoniteIO/` に DLL+PDB を配置 (DLL 未配置なら exit 1) |
 | `just mod-pack`        | `dotnet build -c Release -t:PackTS` で Thunderstore 配布用 zip を `mod/build/` に生成 (`tcli` ラップ)                                              |
 | `just format`          | C# (`csharpier`) と Python (`ruff format` + `ruff check --fix`) を両方走らせる                                                                     |
@@ -182,6 +183,16 @@ C# 側のモジュール構造と Python 側のモジュール構造は **モダ
 ### Renderite IPC のドキュメント不足
 
 Camera readback の実装は **decompile を読みながら**進める前提（plan §7 リスク）。`just decompile` で `decompiled/` 配下に Resonite first-party DLL を ILSpy (`ilspycmd`) で project 形式に展開できる (gitignore 済み)。手探りになる箇所はその場の発見をコメントでは残さず、`.claude/memory/` に feedback として残すこと。
+
+### Debug 経路
+
+mod は Resonite (host プロセス) に in-process でロードされるため、container 内から直接 attach する経路はない。基本戦略は **print-debug + ログ tailing**:
+
+- C# 側は `ResoniteIOPlugin.Log`（BepInEx `ManualLogSource`）から `LogInfo` / `LogDebug` 等を出す。出力先は `$(ResonitePath)/BepInEx/LogOutput.log`
+- host 側で `just log` を別ターミナルで走らせ、`tail -F` で追従する (Resonite 再起動・ログローテーションを跨いで再 attach)
+- Python 側は通常の `logging` でクライアント側の挙動を確認する
+
+.NET debugger attach (host IDE → Resonite プロセス) は Step 3 以降で必要になった時に整備する。PDB は `deploy-mod` 時に DLL と一緒に配置済みなのでシンボル解決の前提は満たしている。
 
 ### ライセンス・ToS
 

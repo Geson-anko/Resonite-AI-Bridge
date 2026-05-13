@@ -171,9 +171,12 @@ resonite-io/
 | `just gen-proto`              | Python 側コード生成 (C# は csproj `<Protobuf>` で build-time 生成)                |
 | `just deploy-mod`             | `dotnet build` → csproj の PostBuild Target で `$(ResonitePath)/BepInEx/plugins/` |
 | `just decompile`              | ILSpy で Resonite アセンブリを project 形式で `decompiled/` に展開                |
+| `just log`                    | `$(ResonitePath)/BepInEx/LogOutput.log` を host で `tail -F` (debug 主経路)       |
 | `just mod-pack`               | `dotnet build -t:PackTS` で Thunderstore zip を `mod/build/` に生成               |
 
 Python 側は `uv sync` で editable install 含めて完結。
+
+**Debug 戦略**: mod は Resonite (host プロセス) に in-process でロードされるため、container 内から直接 attach する経路はない。Step 2 までは `ResoniteIOPlugin.Log` (BepInEx `ManualLogSource`) からの **print-debug + `just log` でのログ tailing** を主経路とする。`deploy-mod` で PDB も配置済みのため、Step 3 以降で必要になったら host IDE (Rider / VSCode C# Dev Kit) から Resonite プロセスに .NET debugger を attach できる。
 
 将来: BepisLoader の .NET Hot Reload (debugger attach 時)。
 

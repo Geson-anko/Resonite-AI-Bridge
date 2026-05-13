@@ -81,6 +81,17 @@ deploy-mod: mod-build
         exit 1; \
     fi
 
+# Resonite (host 側プロセス) の BepInEx ログを追従する。print-debug の主経路。
+# `tail -F` は inode 切り替え (ローテーション / Resonite 再起動) を跨いで再追従する。
+# host 側で起動する想定 (Resonite が動いているのは container ではなく host)。
+log:
+    @: "${ResonitePath:?ResonitePath が未設定です。.env に Resonite 実行ディレクトリを設定してください。}"
+    @LOG="${ResonitePath}/BepInEx/LogOutput.log"; \
+    if [ ! -f "$LOG" ]; then \
+        echo "NOTE: $LOG はまだ存在しません。Resonite が起動すると tail が自動的に追従します。" >&2; \
+    fi; \
+    tail -F "${ResonitePath}/BepInEx/LogOutput.log"
+
 # format → gen-proto → build → test → type を直列実行。コミット前のゲート。
 run: format gen-proto build test type
 
