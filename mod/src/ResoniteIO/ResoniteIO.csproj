@@ -10,7 +10,7 @@
         ResoniteHooks.OnEngineReady を提供
       - ResoniteModding.BepisResoniteWrapper: Harmony 等のラッパ
 
-    FrooxEngine 参照解決:
+    FrooxEngine 参照解決 ($(GamePath) は **参照専用**):
       - $(ResonitePath) (env var) が指す Resonite 実行ディレクトリの
         FrooxEngine.dll / Elements.Core.dll / Renderite.Shared.dll を
         HintPath で直接参照 (Private=False で出力に含めない)
@@ -21,8 +21,12 @@
     proto は Grpc.Tools の <Protobuf> ItemGroup で build-time に C# 生成
     (Server スタブ; mod 側は server 役)。生成物は obj/ に出るため commit しない。
 
-    PostBuild: 成果物を $(GamePath)BepInEx/plugins/$(AssemblyName)/ に Copy。
-    GamePath が空のときは Copy を skip する (CI 安全)。
+    PostBuild Copy 先 ($(GalePath) は **deploy 先専用**):
+      - $(GalePath) (env var) が指す Gale プロファイルの
+        BepInEx/plugins/$(AssemblyName)/ に DLL+PDB を Copy する
+      - env var 未設定時は repo root の ./gale/ を fallback (host 直叩き用)
+      - GalePath ディレクトリが存在しない (CI / Gale 未セットアップ) なら
+        Copy を skip する (CI 安全)
   -->
 
   <PropertyGroup>
@@ -44,7 +48,8 @@
     <CopyToPlugins>true</CopyToPlugins>
     <ThunderstorePackable>true</ThunderstorePackable>
 
-    <!-- Resonite 実行ディレクトリ解決: env var → Steam Win → Steam Linux -->
+    <!-- Resonite 実行ディレクトリ解決 (FrooxEngine.dll 等の HintPath 参照専用):
+         env var → Steam Win → Steam Linux -->
     <GamePath Condition="'$(ResonitePath)' != ''">$(ResonitePath)/</GamePath>
     <GamePath
       Condition="'$(GamePath)' == '' and Exists('$(MSBuildProgramFiles32)\Steam\steamapps\common\Resonite\')"
@@ -54,7 +59,12 @@
       Condition="'$(GamePath)' == '' and Exists('$(HOME)/.steam/steam/steamapps/common/Resonite/')"
       >$(HOME)/.steam/steam/steamapps/common/Resonite/</GamePath
     >
-    <PluginTargetDir>$(GamePath)BepInEx\plugins\$(AssemblyName)</PluginTargetDir>
+
+    <!-- Gale プロファイル (mod deploy 先専用):
+         env var (container) → repo root の ./gale/ (host 直叩き) -->
+    <GalePath Condition="'$(GalePath)' != ''">$(GalePath)/</GalePath>
+    <GalePath Condition="'$(GalePath)' == ''">$(MSBuildThisFileDirectory)..\..\..\gale\</GalePath>
+    <PluginTargetDir>$(GalePath)BepInEx\plugins\$(AssemblyName)</PluginTargetDir>
   </PropertyGroup>
 
   <!-- 必須: BepisLoader 向けの mod ランタイム依存と PluginMetadata 生成 -->
@@ -109,7 +119,7 @@
     <InternalsVisibleTo Include="ResoniteIO.Tests" />
   </ItemGroup>
 
-  <!-- $(GamePath)BepInEx/plugins/$(AssemblyName)/ に成果物を配置 -->
+  <!-- $(GalePath)BepInEx/plugins/$(AssemblyName)/ に成果物を配置 -->
   <Target Name="PostBuild" AfterTargets="PostBuildEvent">
     <ItemGroup>
       <PluginFiles Include="$(TargetPath)" />
@@ -122,12 +132,12 @@
     <Copy
       SourceFiles="@(PluginFiles)"
       DestinationFolder="$(PluginTargetDir)"
-      Condition="'$(CopyToPlugins)' == 'true' and '$(GamePath)' != ''"
+      Condition="'$(CopyToPlugins)' == 'true' and '$(GalePath)' != '' and Exists('$(GalePath)')"
     />
     <Message
       Text="Copied plugin files to $(PluginTargetDir)"
       Importance="high"
-      Condition="'$(CopyToPlugins)' == 'true' and '$(GamePath)' != ''"
+      Condition="'$(CopyToPlugins)' == 'true' and '$(GalePath)' != '' and Exists('$(GalePath)')"
     />
   </Target>
 </Project>
