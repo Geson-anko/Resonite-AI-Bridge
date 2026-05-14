@@ -85,6 +85,53 @@ deploy-mod: mod-build
         exit 1; \
     fi
 
+# Gale プロファイル (./gale/) に BepisLoader と必須プラグインが揃っているか検証する。
+# ホスト上で実行する想定 (container でも GalePath があれば動く)。
+# 検査対象 (実プロファイルの配置に追従):
+#   - $GALE_ROOT/BepisLoader.dll              (Gale が profile root に置く)
+#   - $GALE_ROOT/BepInEx/core/BepInEx.Core.dll
+#   - $GALE_ROOT/BepInEx/core/BepInEx.NET.Common.dll
+#   - $GALE_ROOT/BepInEx/core/0Harmony.dll
+#   - $GALE_ROOT/BepInEx/plugins/ResoniteModding-BepInExResoniteShim*/**/BepInExResoniteShim.dll
+# 不足あれば非 0 exit。version 表示は best-effort。
+check-gale:
+    @GALE_ROOT="${GalePath:-./gale}"; \
+    echo "[check-gale] Checking Gale profile at $GALE_ROOT ..."; \
+    fail=0; \
+    check_file() { \
+        local label="$1" path="$2"; \
+        if [ -f "$path" ]; then \
+            printf "  %-40s ✓\n" "$label"; \
+        else \
+            printf "  %-40s ✗  (expected at %s)\n" "$label" "$path" >&2; \
+            fail=1; \
+        fi; \
+    }; \
+    check_glob() { \
+        local label="$1" pattern="$2"; \
+        local match; \
+        match=$(find $pattern 2>/dev/null | head -n 1); \
+        if [ -n "$match" ]; then \
+            printf "  %-40s ✓  (%s)\n" "$label" "$match"; \
+        else \
+            printf "  %-40s ✗  (no match for %s)\n" "$label" "$pattern" >&2; \
+            fail=1; \
+        fi; \
+    }; \
+    check_file "BepisLoader.dll"          "$GALE_ROOT/BepisLoader.dll"; \
+    check_file "BepInEx.Core.dll"         "$GALE_ROOT/BepInEx/core/BepInEx.Core.dll"; \
+    check_file "BepInEx.NET.Common.dll"   "$GALE_ROOT/BepInEx/core/BepInEx.NET.Common.dll"; \
+    check_file "0Harmony.dll"             "$GALE_ROOT/BepInEx/core/0Harmony.dll"; \
+    check_glob "BepInExResoniteShim.dll"  "$GALE_ROOT/BepInEx/plugins/ResoniteModding-BepInExResoniteShim*/BepInExResoniteShim/BepInExResoniteShim.dll"; \
+    if [ "$fail" -ne 0 ]; then \
+        echo "[check-gale] ERROR: 必要な Gale 部品が見つかりません。" >&2; \
+        echo "  Gale (https://github.com/Kesomannen/gale) で profile を更新し、" >&2; \
+        echo "  少なくとも ResoniteModding-BepisLoader と" >&2; \
+        echo "  ResoniteModding-BepInExResoniteShim を install してください。" >&2; \
+        exit 1; \
+    fi; \
+    echo "[check-gale] All required Gale components present."
+
 # Resonite (host 側プロセス) の BepInEx ログを追従する。print-debug の主経路。
 # `tail -F` は inode 切り替え (ローテーション / Resonite 再起動) を跨いで再追従する。
 # host 側で起動する想定 (Resonite が動いているのは container ではなく host)。
