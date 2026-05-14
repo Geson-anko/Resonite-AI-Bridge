@@ -44,15 +44,18 @@ mod-test:
 mod-pack:
     cd mod && dotnet build ResoniteIO.sln -c Release -t:PackTS -v d
 
-# ローカル開発成果物と Resonite に配置された plugin を撤去する。
-# ResonitePath が空 / ディレクトリが無い場合は plugin 撤去を skip する (安全側)。
+# ローカル開発成果物と Gale プロファイルに配置された plugin を撤去する。
+# 配置先ディレクトリ自体は残す (compose の rw 子 bind が指す inode を維持する
+# ため; ディレクトリごと消すと container 内 bind が stale になる)。
 mod-clean:
     find mod -type d -name 'bin' -prune -exec rm -rf {} +
     find mod -type d -name 'obj' -prune -exec rm -rf {} +
     rm -rf mod/build
-    if [ -n "${ResonitePath:-}" ] && [ -d "$ResonitePath/BepInEx/plugins/ResoniteIO" ]; then \
-        rm -rf "$ResonitePath/BepInEx/plugins/ResoniteIO" && \
-        echo "Removed $ResonitePath/BepInEx/plugins/ResoniteIO"; \
+    @GALE_ROOT="${GalePath:-./gale}"; \
+    PLUGIN_DIR="$GALE_ROOT/BepInEx/plugins/ResoniteIO"; \
+    if [ -d "$PLUGIN_DIR" ]; then \
+        find "$PLUGIN_DIR" -mindepth 1 -delete && \
+        echo "Cleared $PLUGIN_DIR"; \
     fi
 
 # ===== 横断 ==============================================================
@@ -66,18 +69,19 @@ type: py-type
 build: mod-build
 
 # `just mod-build` で csproj の PostBuild Target が
-# $(ResonitePath)/BepInEx/plugins/ResoniteIO/ に DLL+PDB を Copy する。
+# $(GalePath)/BepInEx/plugins/ResoniteIO/ に DLL+PDB を Copy する。
 # 名前で意図を表すために専用レシピを残す。
-# 配置先は ResonitePath 優先、無ければ Steam デフォルトパス。
-# どちらも無効なら build は成功するが Copy がスキップされるためエラー扱い。
+# 配置先は GalePath (container) / repo root の ./gale/ (host) を優先順で解決。
+# gale/ が無効なら build は成功するが Copy がスキップされるためエラー扱い。
 deploy-mod: mod-build
-    @TARGET_ROOT="${ResonitePath:-$HOME/.steam/steam/steamapps/common/Resonite}"; \
-    DLL="$TARGET_ROOT/BepInEx/plugins/ResoniteIO/ResoniteIO.dll"; \
+    @GALE_ROOT="${GalePath:-./gale}"; \
+    DLL="$GALE_ROOT/BepInEx/plugins/ResoniteIO/ResoniteIO.dll"; \
     if [ -f "$DLL" ]; then \
-        echo "Deployed to $TARGET_ROOT/BepInEx/plugins/ResoniteIO/"; \
+        echo "Deployed to $GALE_ROOT/BepInEx/plugins/ResoniteIO/"; \
     else \
         echo "ERROR: 配置先に DLL が見当たりません ($DLL)。" >&2; \
-        echo "       .env に ResonitePath=<Resonite 実行ディレクトリ> を設定してください。" >&2; \
+        echo "       Gale (https://github.com/Kesomannen/gale) v1.5.4+ で" >&2; \
+        echo "       '<repo>/gale' に profile を作り、BepisLoader を追加してください。" >&2; \
         exit 1; \
     fi
 
@@ -119,10 +123,17 @@ container-build:
     docker compose build --no-cache
 
 # bind マウント先を host 側で先に作っておく (Docker 任せだと root 所有で作られる)。
-# ResonitePath 未設定だとルート直下に mkdir してしまうため事前に明示失敗させる。
+# ResonitePath 未設定だと /resonite bind が壊れるため事前に明示失敗させる。
+# Gale プロファイル (./gale/) も同様に事前検証 (BepisLoader 不在だと mod が読まれない)。
 container-up:
     @: "${ResonitePath:?ResonitePath が未設定です。.env に Resonite 実行ディレクトリを設定してください。}"
-    @mkdir -p "${ResonitePath}/BepInEx/plugins/ResoniteIO"
+    @if [ ! -f gale/BepisLoader.dll ]; then \
+        echo "ERROR: ./gale に Gale profile が見当たりません。" >&2; \
+        echo "  Gale (https://github.com/Kesomannen/gale) v1.5.4+ で" >&2; \
+        echo "  '<repo>/gale' に profile を作り、BepisLoader を追加してください。" >&2; \
+        exit 1; \
+    fi
+    @mkdir -p gale/BepInEx/plugins/ResoniteIO
     docker compose up -d
 
 container-down:
