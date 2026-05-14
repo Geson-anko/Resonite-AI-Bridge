@@ -71,6 +71,7 @@ sync_source() {
     --exclude='__pycache__' \
     --exclude='.pytest_cache' \
     --exclude='.ruff_cache' \
+    --exclude='gale' \
     "$SOURCE_DIR/" "$WORKSPACE_DIR/"
   log "rsync done."
 }
