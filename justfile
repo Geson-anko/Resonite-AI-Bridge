@@ -135,13 +135,15 @@ check-gale:
 # Resonite (host 側プロセス) の BepInEx ログを追従する。print-debug の主経路。
 # `tail -F` は inode 切り替え (ローテーション / Resonite 再起動) を跨いで再追従する。
 # host 側で起動する想定 (Resonite が動いているのは container ではなく host)。
+# Gale 経由起動時のログは profile 側 (gale/BepInEx/LogOutput.log) に出る。
+# Gale が将来仕様変更する場合は要再確認。
 log:
-    @: "${ResonitePath:?ResonitePath が未設定です。.env に Resonite 実行ディレクトリを設定してください。}"
-    @LOG="${ResonitePath}/BepInEx/LogOutput.log"; \
+    @GALE_ROOT="${GalePath:-./gale}"; \
+    LOG="$GALE_ROOT/BepInEx/LogOutput.log"; \
     if [ ! -f "$LOG" ]; then \
-        echo "NOTE: $LOG はまだ存在しません。Resonite が起動すると tail が自動的に追従します。" >&2; \
+        echo "NOTE: $LOG はまだ存在しません。Gale から Resonite を起動すると tail が自動的に追従します。" >&2; \
     fi; \
-    tail -F "${ResonitePath}/BepInEx/LogOutput.log"
+    tail -F "$LOG"
 
 # format → gen-proto → build → test → type を直列実行。コミット前のゲート。
 run: format gen-proto build test type
