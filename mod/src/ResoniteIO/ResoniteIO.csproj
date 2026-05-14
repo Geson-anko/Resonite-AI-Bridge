@@ -63,10 +63,7 @@
     <!-- Gale プロファイル (mod deploy 先専用):
          env var (container) → repo root の ./gale/ (host 直叩き) -->
     <GalePath Condition="'$(GalePath)' != ''">$(GalePath)/</GalePath>
-    <GalePath
-      Condition="'$(GalePath)' == ''"
-      >$(MSBuildThisFileDirectory)..\..\..\gale\</GalePath
-    >
+    <GalePath Condition="'$(GalePath)' == ''">$(MSBuildThisFileDirectory)..\..\..\gale\</GalePath>
     <PluginTargetDir>$(GalePath)BepInEx\plugins\$(AssemblyName)</PluginTargetDir>
   </PropertyGroup>
 
