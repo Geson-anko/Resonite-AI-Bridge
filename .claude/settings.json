@@ -86,7 +86,8 @@
       "Bash(uvx *)",
       "Bash(pre-commit run *)",
       "Bash(shfmt *)",
-      "Bash(command *)"
+      "Bash(command *)",
+      "Bash(docker compose *)"
     ],
     "deny": [
       "Bash(git push:*)",
