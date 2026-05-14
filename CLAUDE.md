@@ -8,6 +8,8 @@
 
 設計思想は **強化学習的な抽象化ではなく、リアルタイムロボティクス的な設計**。`Observation/Action` の抽象は持たず、`Camera` / `Audio` / `Locomotion` / `Manipulation` といったモダリティ単位で独立した非同期ストリームを提供する。RL の `step()` 同期はスコープ外で、Python 側ライブラリで上に構築されるべきもの。
 
+C# 実装は **Core/Mod 二層構成**: コア機能 (gRPC server / Service / proto handler / 各モダリティのドメインロジック) は **Resonite に一切依存しないピュアライブラリ `ResoniteIO.Core`** に置き、BepInEx Plugin `ResoniteIO` は engine bridging のみを担う薄いアダプタとする。依存方向は **Core ← Mod** で逆参照禁止。Python (`resoio`) も Resonite 非依存。詳細は [.claude/memory/feedback_core_mod_layering.md](.claude/memory/feedback_core_mod_layering.md) 参照。
+
 詳細な背景・スコープ・採用技術・段階的実装計画は [.claude/resonite_io_plan.md](.claude/resonite_io_plan.md) を **必ず** 参照すること（Step 0〜7、決定事項一覧、リスク欄を含む）。
 
 ## メモリ参照
@@ -18,7 +20,7 @@
 
 ## プロジェクト状況
 
-**現状: Step 0 (Docker 化された開発環境構築) と Step 1 (mod / python / proto のスケルトン) が完了。次は Step 2 (gRPC `Session.Ping` の C# サーバ実装 + Python クライアント接続)**。
+**現状: Step 0 (Docker 化された開発環境構築) と Step 1 (mod / python / proto のスケルトン) が完了。次は Step 2 (gRPC `Session.Ping` の C# サーバ実装 + Python クライアント接続)**。Step 2 で `ResoniteIO.Core` プロジェクトを新設し、現状 `mod/src/ResoniteIO/` 配下にある `.gitkeep` ディレクトリ群のロジック実装は Core 側に移す。
 
 実装済みの主要要素:
 
@@ -29,6 +31,7 @@
 - 補助スクリプト: `scripts/gen_proto.sh` (Python 生成専用) / `scripts/decompile.sh` (ilspycmd) / `scripts/lib.sh`
 - proto lint: `buf.yaml` (`SERVICE_SUFFIX` 除外)
 - mod Thunderstore packaging: `thunderstore.toml` + `tcli` local tool + `dotnet build -t:PackTS`
+- Core/Mod 二層構成は **Step 2 で導入予定** (現状は単一 `ResoniteIO` プロジェクトのみ存在)
 
 リポジトリ実構造:
 
@@ -42,14 +45,14 @@ resonite-io/
 ├── .env.example               # `.env` の雛形 (ResonitePath 等)
 ├── proto/                     # 単一の真実: .proto 定義
 │   └── resonite_io/v1/session.proto   # 他モダリティ proto は Step 3+ で追加
-├── mod/                       # C# 側 (BepisLoader mod, .NET 10)
+├── mod/                       # C# 側 (.NET 10、Step 2 以降は Core/Mod 二層構成)
 │   ├── ResoniteIO.sln
 │   ├── Directory.Build.{props,targets}
 │   ├── NuGet.config / thunderstore.toml / icon.png
-│   ├── src/ResoniteIO/
+│   ├── src/ResoniteIO/        # mod 層 (BepInEx adapter)。Step 2 で ResoniteIO.Core が同階層に追加される
 │   │   ├── ResoniteIO.csproj
 │   │   ├── ResoniteIOPlugin.cs        # BasePlugin + OnEngineReady フック
-│   │   └── {Session,Camera,Audio,Locomotion,Manipulation}/   # .gitkeep のみ
+│   │   └── {Session,Camera,Audio,Locomotion,Manipulation}/   # .gitkeep のみ (Step 2 で Bridge 実装に置換)
 │   └── tests/ResoniteIO.Tests/        # xunit smoke test
 ├── python/                    # Python 側 (uv + betterproto2 + grpclib)
 │   ├── pyproject.toml         # requires-python >=3.12
@@ -68,7 +71,7 @@ resonite-io/
 └── README.md
 ```
 
-C# 側のモジュール構造と Python 側のモジュール構造は **モダリティ単位でミラーリング** する（plan §5 決定事項）。新しいモダリティを追加するときは両側に同名の単位を切ること。
+C# 側のモジュール構造と Python 側のモジュール構造は **モダリティ単位でミラーリング** する（plan §5 決定事項）。新しいモダリティを追加するときは両側に同名の単位を切ること。C# 側では各モダリティを **Core 側 Service + Mod 側 Bridge** のペアで実装する (Core に `<Modality>Service`、Mod に `FrooxEngine<Modality>Bridge`)。
 
 ## ツーリング
 
@@ -110,7 +113,7 @@ C# 側のモジュール構造と Python 側のモジュール構造は **モダ
 ### proto
 
 - スキーマファイル: `proto/resonite_io/v1/*.proto`
-- C# 側生成は `mod/src/ResoniteIO/ResoniteIO.csproj` の `<Protobuf>` ItemGroup により **`dotnet build` 時に `Grpc.Tools` が自動生成** する (Server スタブのみ、`obj/` に出力するため commit しない)
+- C# 側生成は `<Protobuf>` ItemGroup により **`dotnet build` 時に `Grpc.Tools` が自動生成** する (Server スタブのみ、`obj/` に出力するため commit しない)。配置は **Core 側 `mod/src/ResoniteIO.Core/ResoniteIO.Core.csproj`** (Step 2 で新設)。Mod 側 csproj は Core を `ProjectReference` するだけで proto を直接参照しない
 - Python 側生成は `just gen-proto` (内部で `scripts/gen_proto.sh`) で `python/src/resoio/_generated/` に書き、commit する。**コンテナ内で実行する**
 - proto lint: `buf` (`buf.yaml`)。`SERVICE_SUFFIX` は除外 (service 名はモダリティ名そのもの)
 - スキーマは **Step ごとに incremental に詰める**（plan §5）
@@ -228,10 +231,11 @@ Resonite は明示的な研究用 bot 規定なし。慣習的には黙認〜歓
 
 ### C# 側
 
-- 名前空間は `ResoniteIO.<Modality>`
+- **Core/Mod 層の責務を混ぜない**: `ResoniteIO.Core` (pure library) は BepInEx / FrooxEngine / Renderite を一切参照せず、`ResoniteIO` (mod) は engine bridging のみ。新規モダリティは Core に `<Modality>Service` + `I<Modality>Bridge`、Mod に `FrooxEngine<Modality>Bridge` を 1 ペアで追加する
+- 名前空間: Core 側は `ResoniteIO.Core.<Modality>`、Mod 側は `ResoniteIO.Bridge` (engine 実装) と `ResoniteIO` (Plugin 本体)
 - `Nullable=enable` + `TreatWarningsAsErrors=true` を `.csproj` で必ず有効にする
-- gRPC server は **別スレッドで動作** させ、FrooxEngine 本体スレッドをブロックしない（plan Step 2）
-- LocalUser 駆動など FrooxEngine API を呼ぶ箇所は engine の update tick 上にディスパッチする必要がある可能性大。スレッド要件はモジュールごとに調査して `.claude/memory/` に書き残すこと
+- gRPC server は **別スレッドで動作** させ、FrooxEngine 本体スレッドをブロックしない（plan Step 2）。Service 実装は Core 側にあり engine を知らないため、engine 依存処理は Bridge IF 経由で同期/非同期にディスパッチする
+- LocalUser 駆動など FrooxEngine API を呼ぶ箇所 (Mod 側 Bridge 実装) は engine の update tick 上にディスパッチする必要がある可能性大。スレッド要件はモジュールごとに調査して `.claude/memory/` に書き残すこと
 
 ### Python 側
 
@@ -275,8 +279,9 @@ Resonite は明示的な研究用 bot 規定なし。慣習的には黙認〜歓
 
 ### C# 側
 
-- xunit。FrooxEngine に依存するロジックは Resonite を起動しないと真に検証できないため、ユニットテスト対象は **純粋なバイト列処理 / proto 変換 / 状態機械** に絞る
-- C# の e2e は手順書として `mod/tests/manual/` に Markdown で残す方針 (Step 1〜2 で確定させる)
+- xunit
+- **Core 側** (`ResoniteIO.Core.Tests`): Resonite 非依存なので **Kestrel ラウンドトリップを含む統合テストを書ける**。tmp_path UDS に SessionHost を bind、`Grpc.Net.Client` から実 RPC を投げて echo + timestamp を検証する。proto 変換 / 状態機械 / Service ロジックもここで検証
+- **Mod 側** (`ResoniteIO.Tests`): FrooxEngine 依存があるため smoke test と Bridge adapter ロジック (engine API を呼ばない範囲) のみ。実 engine を要するシナリオは `mod/tests/manual/` に Markdown 手順書として残す
 
 ## Git 運用
 
