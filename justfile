@@ -93,6 +93,7 @@ deploy-mod: mod-build
 #   - $GALE_ROOT/BepInEx/core/BepInEx.NET.Common.dll
 #   - $GALE_ROOT/BepInEx/core/0Harmony.dll
 #   - $GALE_ROOT/BepInEx/plugins/ResoniteModding-BepInExResoniteShim*/**/BepInExResoniteShim.dll
+#   - $GALE_ROOT/BepInEx/plugins/ResoniteModding-BepisResoniteWrapper*/**/BepisResoniteWrapper.dll
 # 不足あれば非 0 exit。version 表示は best-effort。
 check-gale:
     @GALE_ROOT="${GalePath:-./gale}"; \
@@ -123,11 +124,13 @@ check-gale:
     check_file "BepInEx.NET.Common.dll"   "$GALE_ROOT/BepInEx/core/BepInEx.NET.Common.dll"; \
     check_file "0Harmony.dll"             "$GALE_ROOT/BepInEx/core/0Harmony.dll"; \
     check_glob "BepInExResoniteShim.dll"  "$GALE_ROOT/BepInEx/plugins/ResoniteModding-BepInExResoniteShim*/BepInExResoniteShim/BepInExResoniteShim.dll"; \
+    check_glob "BepisResoniteWrapper.dll" "$GALE_ROOT/BepInEx/plugins/ResoniteModding-BepisResoniteWrapper*/BepisResoniteWrapper/BepisResoniteWrapper.dll"; \
     if [ "$fail" -ne 0 ]; then \
         echo "[check-gale] ERROR: 必要な Gale 部品が見つかりません。" >&2; \
         echo "  Gale (https://github.com/Kesomannen/gale) で profile を更新し、" >&2; \
-        echo "  少なくとも ResoniteModding-BepisLoader と" >&2; \
-        echo "  ResoniteModding-BepInExResoniteShim を install してください。" >&2; \
+        echo "  少なくとも ResoniteModding-BepisLoader,"  >&2; \
+        echo "  ResoniteModding-BepInExResoniteShim,"     >&2; \
+        echo "  ResoniteModding-BepisResoniteWrapper を install してください。" >&2; \
         exit 1; \
     fi; \
     echo "[check-gale] All required Gale components present."
