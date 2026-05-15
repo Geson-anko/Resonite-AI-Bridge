@@ -21,7 +21,9 @@ ENV PATH=/usr/local/dotnet:/usr/local/bin:/home/dev/.local/bin:$PATH
 ENV DOTNET_CLI_TELEMETRY_OPTOUT=1
 ENV DOTNET_NOLOGO=1
 
-# python3 / build-essential は入れない (uv が独自 Python を引く)。
+# build-essential は入れない (uv が独自 Python を引く)。
+# python3 は debug bridge client (scripts/resonite_cli.py) 専用。uv 系の
+# Python 環境とは分離した stdlib 実行用で、PYTHONPATH も share しない。
 # libicu72 は .NET SDK の globalization 初期化に必要 (bookworm-slim には含まれない)。
 RUN apt-get update && apt-get install -y --no-install-recommends \
         git \
@@ -35,6 +37,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
         libatomic1 \
         libicu72 \
         netcat-openbsd \
+        python3 \
         shellcheck \
         shfmt \
         sudo \

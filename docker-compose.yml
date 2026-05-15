@@ -18,6 +18,10 @@
 #   を上書きし、両側で既定 socket dir が同一絶対パスに解決されるようにする。
 #   host 側ディレクトリは `just container-up` が 0700 で先に作成する
 #   (Docker 任せだと root 所有で作られ、mod が bind できなくなる)。
+# - 同様に `/run/user/${HOST_UID}/resonite-io-debug` も rw bind する。こちらは
+#   container 内 `scripts/resonite_cli.py` から host 常駐の `scripts/host_agent.py`
+#   を叩く debug bridge 専用 UDS (`host-agent.sock`)。本番 gRPC IPC とは
+#   ディレクトリ単位で分離し、mod 側の socket 探索が誤って拾わないようにする。
 
 name: resonite-io-${USER}
 
@@ -58,6 +62,13 @@ services:
       - type: bind
         source: /run/user/${HOST_UID}/resonite-io
         target: /run/user/${HOST_UID}/resonite-io
+        bind:
+          create_host_path: false
+      # Debug bridge UDS 共有: container 内 scripts/resonite_cli.py が host 常駐の
+      # scripts/host_agent.py を叩く debug 専用 socket dir。本番 IPC とは別 dir。
+      - type: bind
+        source: /run/user/${HOST_UID}/resonite-io-debug
+        target: /run/user/${HOST_UID}/resonite-io-debug
         bind:
           create_host_path: false
       # NuGet / uv の既定キャッシュパスにマウントするため、コンテナ側で追加 ENV は不要。
