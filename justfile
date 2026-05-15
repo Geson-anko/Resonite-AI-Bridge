@@ -211,3 +211,32 @@ container-shell:
 # 完全削除 (named volume の作業内容も消える, destructive)。
 container-clean:
     docker compose down -v --rmi local --remove-orphans
+
+# ===== Host bridge (Resonite debug) =========================================
+#
+# host 常駐 daemon (`scripts/host_agent.py`) と container 側 client
+# (`scripts/resonite_cli.py`) を組み合わせて、container 内 shell から host
+# 上の Resonite を Gale 経由で start/stop/status する debug 経路。
+# UDS は本番 gRPC IPC とは分離した $XDG_RUNTIME_DIR/resonite-io-debug/ を使う。
+
+# container 側 `just resonite-*` のための debug bridge daemon を host で
+# foreground 起動する。Ctrl+C で停止、socket は自動 unlink。環境変数の検査は
+# host_agent.py 内で行う (DISPLAY / WAYLAND_DISPLAY / GaleBin が必要)。
+# **GUI session の端末から実行** (gale は --no-gui でもディスプレイを要求)。
+host-agent:
+    python3 scripts/host_agent.py
+
+# container 内 shell (または host) から host の Resonite を起動する。
+# profile 名は .env の GaleProfile を既定値とし、`--profile <name>` で override。
+# 例: `just resonite-start` / `just resonite-start --profile my-profile`
+resonite-start *ARGS:
+    python3 scripts/resonite_cli.py start {{ARGS}}
+
+# container 内 shell (または host) から Resonite / Renderite を停止する。
+# SIGTERM → 3 秒待ち → SIGKILL の二段構え。Proton 系プロセスは触らない。
+resonite-stop:
+    python3 scripts/resonite_cli.py stop
+
+# Resonite / Renderite の実行状態を JSON で表示する。
+resonite-status:
+    python3 scripts/resonite_cli.py status
