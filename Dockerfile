@@ -34,6 +34,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
         bash-completion \
         libatomic1 \
         libicu72 \
+        netcat-openbsd \
         shellcheck \
         shfmt \
         sudo \

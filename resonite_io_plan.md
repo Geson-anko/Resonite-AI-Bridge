@@ -126,7 +126,7 @@ ______________________________________________________________________
 - [x] `pre-commit` (ruff / pyupgrade / docformatter / mdformat / codespell / uv-lock / pygrep / shellcheck / shfmt)
 - [x] VSCode 推奨拡張一覧 (`.vscode/extensions.json`): C# Dev Kit / Pylance / Ruff / csharpier / buf / docker など
 - ~~`scripts/setup.sh`~~ (廃止: Docker 環境に置き換え)
-- [ ] **`./run/` の rw bind** (Step 2 で追加): UDS socket を host Resonite と container Python で共有するためのディレクトリ。`docker-compose.yml` に `./run:/workspace/run:rw` を追加し、container 側 env で `RESONITE_IO_SOCKET: /workspace/run/session.sock` を固定。host 側パスは `.env` の `SocketPath` キーで指定 (Steam launch options / `~/.config/environment.d/` で Resonite プロセスに export する想定)
+- [x] **UDS socket 共有ディレクトリの bind**: `$XDG_RUNTIME_DIR/resonite-io/` (= `/run/user/$UID/resonite-io/`) を host / container 双方で同一絶対パスとして bind 共有。`docker-compose.yml` に long-form bind (`/run/user/${HOST_UID}/resonite-io:/run/user/${HOST_UID}/resonite-io:rw`、`create_host_path: false`) と `environment.XDG_RUNTIME_DIR: /run/user/${HOST_UID}` を追加。host 側ディレクトリは `just container-up` が `0700` で事前作成する。socket ファイル名は mod 側で `resonite-{pid}.sock` を自動命名 (Step 2 で実装) し、Python client は `RESONITE_IO_SOCKET` / `RESONITE_IO_SOCKET_DIR` / 既定 (`$XDG_RUNTIME_DIR/resonite-io/`) の優先順で探索する (`.env` への記述は通常不要)。
 
 ### C. モノレポ構造 (目標形)
 
@@ -140,12 +140,11 @@ ______________________________________________________________________
 ```text
 resonite-io/
 ├── Dockerfile                     # 開発コンテナ image (debian + .NET 10 + uv + protoc)
-├── docker-compose.yml             # dev サービス定義 (UID/GID 一致 / ResonitePath / Gale / UDS run/ bind)
+├── docker-compose.yml             # dev サービス定義 (UID/GID 一致 / ResonitePath / Gale / XDG_RUNTIME_DIR + UDS bind)
 ├── justfile                       # ルートタスクランナー (build / test / container-*)
 ├── buf.yaml                       # proto lint/breaking (modules: proto/)
 ├── .pre-commit-config.yaml
-├── .env.example                   # ResonitePath / SocketPath 等の雛形 (.env は gitignore)
-├── run/                           # UDS socket 共有ディレクトリ (gitignore, Step 2 で導入)
+├── .env.example                   # ResonitePath / UDS override 等の雛形 (.env は gitignore)
 │
 ├── proto/                         # 単一の真実: .proto 定義
 │   └── resonite_io/v1/
@@ -284,7 +283,7 @@ ______________________________________________________________________
 - ✅ **C# は二層構成**: `ResoniteIO.Core` (pure library) と `ResoniteIO` (BepInEx mod アダプタ)。Mod は Core を `ProjectReference` し、Bridge インターフェイス経由で engine 依存処理を注入する
 - ✅ **C# proto 生成は Core 側に集約**。`<Protobuf GrpcServices="Server" />` は `ResoniteIO.Core.csproj` に置く。Mod 側 csproj は Core への ProjectReference のみで proto 直接参照は持たない
 - ✅ **C# gRPC server**: `Grpc.AspNetCore.Server` (Kestrel + UDS) を Core 側で使用、`WebApplication.CreateSlimBuilder()` で最小構成 (Reflection 等のオマケは含めない)
-- ✅ **UDS socket path**: host 絶対パスを `.env` の `SocketPath` で指定、container 側は `./run:/workspace/run:rw` bind 経由で同じファイルを共有。両言語で env var `RESONITE_IO_SOCKET` を読む
+- ✅ **UDS socket path**: host と container で `/run/user/${HOST_UID}/resonite-io/` を同一絶対パスで rw bind 共有 (`docker-compose.yml` long-form bind + container 側 `XDG_RUNTIME_DIR` env)。socket ファイル名は mod が `resonite-{pid}.sock` を採用し、1 host 上で複数 Resonite が共存可能。Python client は `RESONITE_IO_SOCKET` (フルパス) → `RESONITE_IO_SOCKET_DIR` → 既定 `$XDG_RUNTIME_DIR/resonite-io/` の順で解決し、ディレクトリ探索時は 1 個なら自動採用 / 複数なら明示指定を要求。host 側ディレクトリは `just container-up` が 0700 で先に作成 (`create_host_path: false` で fail-fast)。
 - ✅ **テスト戦略の二層化**:
   - Core 単体: Kestrel ラウンドトリップ含む統合テストを xunit で (Resonite 不要)
   - Mod adapter: BepInEx 依存があるため smoke test のみ
@@ -308,7 +307,7 @@ ______________________________________________________________________
 
 各 Step は Core/Mod 二層構成を前提に分割する (§設計レイヤー / §5 決定事項)。
 
-- **Core** (`ResoniteIO.Core`): プロジェクト新設、`Grpc.AspNetCore.Server` + `<Protobuf>` を Core 側に集約、`SessionService` (Ping echo + Unix nanos) と `SessionHost` (Kestrel + UDS lifecycle、stale socket 削除) を実装。Kestrel ラウンドトリップで xunit 統合テスト (Resonite 不要)
+- **Core** (`ResoniteIO.Core`): プロジェクト新設、`Grpc.AspNetCore.Server` + `<Protobuf>` を Core 側に集約、`SessionService` (Ping echo + Unix nanos) と `SessionHost` (Kestrel + UDS lifecycle: `$XDG_RUNTIME_DIR/resonite-io/` を `0700` で `mkdir`、`resonite-{Process.GetCurrentProcess().Id}.sock` で bind、起動時に stale socket を `File.Delete`、`AppDomain.ProcessExit` で best-effort `unlink`) を実装。Kestrel ラウンドトリップで xunit 統合テスト (Resonite 不要)
 - **Mod** (`ResoniteIO`): `ResoniteIOPlugin` から `SessionHost` を起動、`ISessionBridge` を FrooxEngine 実装 (`FrooxEngineSessionBridge`) で注入、Step 1 宿題である `FocusedWorld` / `LocalUser` のログ出力を Bridge 経由で実現、`AppDomain.ProcessExit` / `Engine.OnShutdown` で graceful stop
 - **Python** (`resoio`): `SessionClient` (async context manager) と in-process server (`SessionBase` 継承の echo 実装) を tmp_path UDS で繋ぐ round-trip テスト
 
@@ -348,7 +347,7 @@ ______________________________________________________________________
 - **ライセンス・ToS**: Resonite は明示的な研究用 bot 規定なし。慣習的には黙認〜歓迎
 - **マルチエージェント**: スコープ外だが、将来は 1 Resonite インスタンス = 1 エージェントのコスト問題が出てくる
 - **Kestrel が引き連れる依存と Resonite 同梱 DLL の version skew**: `Grpc.AspNetCore.Server` は `Microsoft.AspNetCore.*` / `Microsoft.Extensions.*` / `System.IO.Pipelines` を芋づる式に持ち込む。Core に閉じ込めても mod ロード時に同一 AppDomain で Resonite 同梱バージョンと衝突しうる。Step 2 着手時に `just decompile` で Resonite 同梱バージョンを確認し `.claude/memory/` に記録する。`PrivateAssets="all"` / `Private="False"` の慎重な設定が必要
-- **UDS socket の host ↔ container 共有**: `./run:/workspace/run:rw` bind は HOST_UID/HOST_GID 一致前提 (現状の docker-compose の方針と整合)。マルチユーザー環境では `.env` の `SocketPath` をユーザーごとに切り分ける必要がある。stale socket は SessionHost 起動時に `File.Delete` で除去する
+- **UDS socket の host ↔ container 共有**: `/run/user/${HOST_UID}/resonite-io/` を両側同一絶対パスで rw bind し、`HOST_UID` 一致 (justfile が `id -u` から注入) で perms を揃える。host 側ディレクトリは `just container-up` が 0700 で事前作成 (Docker 任せだと root 所有になる)。`$XDG_RUNTIME_DIR` 未設定環境 (非 systemd-logind セッション) では fail-fast し、`/tmp` fallback は当面持たない。stale socket は SessionHost が bind 直前に `File.Delete` で除去 (PID 一致や mtime チェックは Step 2 ではやらず、`unlink` 前提で十分)。SIGKILL 等で `unlink` を逃した socket も次回起動時に上書き除去される。マルチユーザー環境では `HOST_UID` 名前空間で自然に分離される。
 - **Bridge インターフェイスの粒度**: モダリティが増えるにつれ IF が肥大化する懸念。各モダリティで独立 IF (`ISessionBridge`, `ICameraBridge`, …) として分割する方針 (§2 採用方針)
 - **`BasePlugin` に Unload 相当が無い**: BepInEx 6 の `BasePlugin` には mod 終了時 hook が無い。`Engine.OnShutdown` 系 API の有無を Step 2 着手時に decompile で確認し、無ければ `AppDomain.ProcessExit` で best-effort 停止する (SIGKILL されたら socket file は残る)
 

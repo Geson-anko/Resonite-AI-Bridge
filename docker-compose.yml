@@ -13,6 +13,11 @@
 #   コンテナ内では `environment: GalePath: /gale` で csproj が deploy 先を解決。
 # - ${HOST_UID} / ${HOST_GID} は justfile の container-* レシピが
 #   `id -u` / `id -g` から動的に注入する。.env には書かない。
+# - host と container で `/run/user/${HOST_UID}/resonite-io` を rw bind し、
+#   UDS socket file を共有する。container 内 env で XDG_RUNTIME_DIR=/run/user/${HOST_UID}
+#   を上書きし、両側で既定 socket dir が同一絶対パスに解決されるようにする。
+#   host 側ディレクトリは `just container-up` が 0700 で先に作成する
+#   (Docker 任せだと root 所有で作られ、mod が bind できなくなる)。
 
 name: resonite-io-${USER}
 
@@ -33,6 +38,9 @@ services:
     environment:
       ResonitePath: /resonite
       GalePath: /gale
+      # host と container で $XDG_RUNTIME_DIR を一致させ、UDS の既定ディレクトリ
+      # (/run/user/${HOST_UID}/resonite-io) を両側で同じ絶対パスで解決させる。
+      XDG_RUNTIME_DIR: /run/user/${HOST_UID}
     init: true
     stdin_open: true
     tty: true
@@ -42,6 +50,16 @@ services:
       - ${ResonitePath}:/resonite:ro
       - ./gale:/gale:ro
       - ./gale/BepInEx/plugins/ResoniteIO:/gale/BepInEx/plugins/ResoniteIO:rw
+      # UDS socket 共有: host の Resonite mod が bind した socket を container 内の
+      # Python から connect する。HOST_UID 名前空間下の同一絶対パスを使う。
+      # host 側ディレクトリは justfile container-up が事前に 0700 で作成する
+      # (Docker 任せだと root 所有で生成される)。create_host_path: false で
+      # 未作成時に fail-fast。
+      - type: bind
+        source: /run/user/${HOST_UID}/resonite-io
+        target: /run/user/${HOST_UID}/resonite-io
+        bind:
+          create_host_path: false
       # NuGet / uv の既定キャッシュパスにマウントするため、コンテナ側で追加 ENV は不要。
       - cache-nuget:/home/dev/.nuget
       - cache-uv:/home/dev/.cache/uv

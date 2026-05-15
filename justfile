@@ -186,6 +186,12 @@ container-up:
         exit 1; \
     fi
     @mkdir -p gale/BepInEx/plugins/ResoniteIO
+    # UDS socket 用 host ディレクトリを 0700 で先に作る。Docker 任せだと root 所有
+    # で生成され、mod (host UID) が bind できなくなる。
+    # $XDG_RUNTIME_DIR が無い (systemd-logind セッション外) 環境では失敗させる。
+    @: "${XDG_RUNTIME_DIR:?XDG_RUNTIME_DIR が未設定です。systemd-logind セッション内で実行してください (loginctl enable-linger は不要)。}"
+    @SOCK_DIR="$XDG_RUNTIME_DIR/resonite-io"; \
+        mkdir -p "$SOCK_DIR" && chmod 0700 "$SOCK_DIR"
     docker compose up -d
 
 container-down:
