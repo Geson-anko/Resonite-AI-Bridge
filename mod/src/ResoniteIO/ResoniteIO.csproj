@@ -139,14 +139,10 @@
     Condition="'$(NetCoreRoot)' != ''"
   >
     <PropertyGroup>
-      <_AspNetCoreSharedFrameworkDir
-        >$(NetCoreRoot)shared\Microsoft.AspNetCore.App\$(BundledNETCoreAppPackageVersion)\</_AspNetCoreSharedFrameworkDir
-      >
+      <_AspNetCoreSharedFrameworkDir>$(NetCoreRoot)shared\Microsoft.AspNetCore.App\$(BundledNETCoreAppPackageVersion)\</_AspNetCoreSharedFrameworkDir>
     </PropertyGroup>
     <ItemGroup>
-      <_AspNetCoreSharedFrameworkFiles
-        Include="$(_AspNetCoreSharedFrameworkDir)*.dll"
-      />
+      <_AspNetCoreSharedFrameworkFiles Include="$(_AspNetCoreSharedFrameworkDir)*.dll" />
     </ItemGroup>
     <Message
       Text="Importing ASP.NET Core shared framework from $(_AspNetCoreSharedFrameworkDir) (@(_AspNetCoreSharedFrameworkFiles->Count()) files)"
