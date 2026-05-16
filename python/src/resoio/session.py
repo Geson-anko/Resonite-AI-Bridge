@@ -1,12 +1,4 @@
-"""High-level client for the Resonite IO ``Session`` gRPC service.
-
-The :class:`SessionClient` opens a :mod:`grpclib` channel over a Unix Domain
-Socket and exposes typed wrappers around the RPCs defined in
-``proto/resonite_io/v1/session.proto`` (currently only ``Ping``). Socket path
-resolution honours ``RESONITE_IO_SOCKET`` (full path) → ``RESONITE_IO_SOCKET_DIR``
-(directory + glob) → default ``~/.resonite-io/`` (matches the C# Mod's default,
-shared across the host / pressure-vessel sandbox / Docker container).
-"""
+"""Client for the Resonite IO ``Session`` gRPC service over a UDS."""
 
 from __future__ import annotations
 
@@ -34,34 +26,19 @@ _DEFAULT_SOCKET_DIR_NAME = ".resonite-io"
 
 
 class SocketNotFoundError(RuntimeError):
-    """No Resonite IO socket could be discovered.
-
-    Raised when neither an explicit path nor any candidate
-    ``resonite-*.sock`` matched the configured search directory. Usually
-    means the mod is not running or the discovery env vars do not point
-    at the directory it bound to.
-    """
+    """No ``resonite-*.sock`` matched the configured search directory."""
 
 
 class AmbiguousSocketError(RuntimeError):
-    """Multiple candidate sockets were found and no override resolved them.
-
-    Raised when more than one ``resonite-*.sock`` exists in the search
-    directory (e.g. a stale socket from a previous Resonite process plus
-    the live one). Set ``RESONITE_IO_SOCKET`` to the desired path to
-    disambiguate.
-    """
+    """Multiple candidate sockets found; set ``RESONITE_IO_SOCKET`` to pick
+    one."""
 
 
 def _resolve_socket_path() -> str:
-    """Resolve the UDS path to connect to, honoring env-var overrides.
-
-    Empty strings are treated as "unset" so a stray ``=`` in shell config
-    falls through to the next discovery step rather than yielding a bogus
-    empty path. The final fallback (``~/.resonite-io/``) matches the C# Mod
-    default, so a ``SessionClient()`` constructed with no arguments just
-    works whenever the Mod is running under the same effective user.
-    """
+    # Empty env-var values fall through to the next step so a stray ``FOO=`` in
+    # shell config does not produce a bogus empty path. The ``~/.resonite-io/``
+    # fallback mirrors the C# Mod default so a zero-arg client just works under
+    # the same effective user (including across the pressure-vessel sandbox).
     explicit = os.environ.get("RESONITE_IO_SOCKET")
     if explicit:
         return explicit
@@ -74,7 +51,6 @@ def _resolve_socket_path() -> str:
 
 
 def _pick_single_socket(directory: str) -> str:
-    """Pick exactly one ``resonite-*.sock`` inside *directory*."""
     pattern = os.path.join(directory, _SOCKET_GLOB)
     candidates = sorted(glob.glob(pattern))
     if not candidates:
@@ -94,24 +70,17 @@ def _pick_single_socket(directory: str) -> str:
 class SessionClient:
     """Async client for the Resonite IO ``Session`` service over a UDS.
 
-    Use as an async context manager so the underlying gRPC channel is
-    closed deterministically::
-
-        async with SessionClient() as client:
-            response = await client.ping("hello")
-
-    When ``socket_path`` is omitted, the UDS path is resolved on
-    ``__aenter__`` in this order: explicit ``RESONITE_IO_SOCKET`` env var,
-    a single ``resonite-*.sock`` under ``RESONITE_IO_SOCKET_DIR``, then a
-    single one under ``~/.resonite-io/`` (the default the C# Mod also uses,
-    shared across the host / pressure-vessel sandbox / Docker container).
-    Resolution can raise :class:`SocketNotFoundError` or
-    :class:`AmbiguousSocketError`.
+    Use as an async context manager so the gRPC channel is closed
+    deterministically. With ``socket_path=None`` the path is resolved on
+    ``__aenter__`` via ``RESONITE_IO_SOCKET`` →
+    ``RESONITE_IO_SOCKET_DIR`` → ``~/.resonite-io/``; resolution may
+    raise :class:`SocketNotFoundError` or :class:`AmbiguousSocketError`.
     """
 
     def __init__(self, socket_path: str | None = None) -> None:
-        # Defer socket resolution until __aenter__ so env vars can be patched
-        # between construction and connection (and so errors surface there).
+        # Defer resolution to __aenter__ so env vars patched between
+        # construction and connection are honoured, and so resolution
+        # errors surface at the connect site.
         self._explicit_path: str | None = socket_path
         self._channel: Channel | None = None
         self._stub: SessionStub | None = None
@@ -119,8 +88,7 @@ class SessionClient:
 
     @property
     def socket_path(self) -> str | None:
-        """The UDS path the client is connected to, or ``None`` before
-        enter."""
+        """Resolved UDS path, or ``None`` before ``__aenter__``."""
         return self._resolved_path
 
     async def __aenter__(self) -> Self:
@@ -139,8 +107,8 @@ class SessionClient:
         tb: TracebackType | None,
     ) -> None:
         channel = self._channel
-        # Reset state first so a raising `close()` still leaves the client
-        # in a clean "not connected" state for any retry / re-enter logic.
+        # Reset state before close() so a raising close still leaves the
+        # client in a clean "not connected" state for retry / re-enter.
         self._channel = None
         self._stub = None
         self._resolved_path = None
@@ -148,8 +116,6 @@ class SessionClient:
             channel.close()
 
     async def ping(self, message: str) -> PingResponse:
-        """Send a ``Ping`` RPC and return the server's
-        :class:`PingResponse`."""
         stub = self._stub
         if stub is None:
             raise RuntimeError(

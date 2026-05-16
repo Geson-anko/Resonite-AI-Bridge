@@ -9,24 +9,8 @@ namespace ResoniteIO.Core.Tests.Helpers;
 /// テスト用に <see cref="SessionHost"/> を tmp_path UDS 上で起動・停止する harness。
 /// </summary>
 /// <remarks>
-/// <para>
-/// テスト本体から socket path 採番 / <c>RESONITE_IO_SOCKET</c> env var の出入り /
-/// Kestrel bind 完了待ち / Dispose 時の cleanup といった setup/teardown 関心事を
-/// 切り離し、テスト本体は実際に検証したいシナリオに専念できるようにする。
-/// </para>
-/// <para>
-/// 使用例:
-/// <code>
-/// await using var harness = await SessionHostHarness.StartAsync();
-/// using var channel = harness.CreateChannel();
-/// var client = new V1.Session.SessionClient(channel);
-/// var response = await client.PingAsync(new PingRequest { Message = "hello" });
-/// </code>
-/// </para>
-/// <para>
 /// <c>RESONITE_IO_SOCKET</c> env var を読み書きするため、これを使うテストクラスは
 /// xunit collection <c>"SessionHostEnv"</c> で直列化する必要がある。
-/// </para>
 /// </remarks>
 internal sealed class SessionHostHarness : IAsyncDisposable
 {
@@ -50,14 +34,6 @@ internal sealed class SessionHostHarness : IAsyncDisposable
         _previousEnv = previousEnv;
     }
 
-    /// <summary>
-    /// tmp_path UDS に <see cref="SessionHost"/> を起動し、socket file の出現まで待つ。
-    /// </summary>
-    /// <param name="bridge">
-    /// <see cref="ISessionBridge"/> を DI に流し込みたい場合に渡す。<c>null</c> なら
-    /// 通常の <see cref="SessionHost.Start(ILogSink, CancellationToken, ISessionBridge?)"/>
-    /// が default で DI 登録をスキップする挙動と同等。
-    /// </param>
     public static async Task<SessionHostHarness> StartAsync(ISessionBridge? bridge = null)
     {
         var socketPath = Path.Combine(Path.GetTempPath(), $"rio-test-{Guid.NewGuid():N}.sock");
@@ -86,10 +62,6 @@ internal sealed class SessionHostHarness : IAsyncDisposable
         return new SessionHostHarness(socketPath, host, cts, previousEnv);
     }
 
-    /// <summary>
-    /// 起動済み UDS に接続する <see cref="GrpcChannel"/> を生成する。
-    /// 呼び出し側で <c>using</c> して channel の lifecycle を管理する。
-    /// </summary>
     public GrpcChannel CreateChannel()
     {
         return GrpcChannel.ForAddress(
@@ -127,10 +99,7 @@ internal sealed class SessionHostHarness : IAsyncDisposable
         {
             await Host.DisposeAsync();
         }
-        catch
-        {
-            // best-effort: テスト後の cleanup なので例外は飲み込む
-        }
+        catch { }
         _cts.Dispose();
 
         Environment.SetEnvironmentVariable("RESONITE_IO_SOCKET", _previousEnv);
@@ -138,9 +107,6 @@ internal sealed class SessionHostHarness : IAsyncDisposable
         {
             File.Delete(SocketPath);
         }
-        catch
-        {
-            // best-effort
-        }
+        catch { }
     }
 }

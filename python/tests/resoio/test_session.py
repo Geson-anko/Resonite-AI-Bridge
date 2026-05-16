@@ -1,9 +1,3 @@
-"""Tests for ``resoio.session``.
-
-Covers the Step 2 behaviors: in-process UDS round-trip against a real
-``grpclib`` server, and the two error paths in socket-path resolution.
-"""
-
 import time
 from pathlib import Path
 
@@ -23,8 +17,6 @@ from resoio.session import (
 
 
 class _EchoSession(SessionBase):
-    """In-process echo implementation used to validate round-tripping."""
-
     async def ping(self, message: PingRequest) -> PingResponse:
         return PingResponse(
             message=message.message,
@@ -33,8 +25,6 @@ class _EchoSession(SessionBase):
 
 
 class TestSessionClient:
-    """End-to-end behavior of ``SessionClient`` against a local UDS server."""
-
     async def test_round_trip_over_uds(
         self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
     ):

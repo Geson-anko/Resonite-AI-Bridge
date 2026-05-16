@@ -1,8 +1,4 @@
-"""resoio: Python client for Resonite IO.
-
-The package version is single-sourced from ``pyproject.toml`` via
-``importlib.metadata`` so it stays in sync with the installed distribution.
-"""
+"""resoio: Python client for Resonite IO."""
 
 from importlib.metadata import version as _version
 

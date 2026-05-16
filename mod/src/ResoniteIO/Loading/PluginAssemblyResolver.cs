@@ -7,33 +7,18 @@ using BepInEx.Logging;
 namespace ResoniteIO.Loading;
 
 /// <summary>
-/// BepInEx plugin folder に同梱した隣接 DLL を <see cref="AssemblyLoadContext.Default"/>
-/// から probe するためのアセンブリリゾルバ。Plugin 本体の責務 (engine bridging) から
-/// 切り離してこのクラスに閉じ込めている。
+/// Plugin folder 同梱の隣接 DLL (Microsoft.AspNetCore.* / Grpc.AspNetCore.* 等) を
+/// Default <see cref="AssemblyLoadContext"/> から probe させる fallback リゾルバ。
 /// </summary>
 /// <remarks>
+/// BepInEx は plugin folder を Default ALC の probe path に登録しないため、これが無いと
+/// runtime が <see cref="FileNotFoundException"/> を投げる。
+/// 寿命は plugin と一致させる: dispose 後の lazy ロードは同じ理由で fail する。
 /// <para>
-/// BepInEx は plugin folder を Default <see cref="AssemblyLoadContext"/> の probe path
-/// に登録しないため、<see cref="System.Reflection.Assembly"/> 解決時に
-/// <c>Microsoft.AspNetCore.*</c> / <c>Grpc.AspNetCore.*</c> 等の隣接 DLL を
-/// runtime が見つけられず <see cref="FileNotFoundException"/> になる。
-/// 本リゾルバが <see cref="AssemblyLoadContext.Resolving"/> イベントを購読して、
-/// plugin folder 内に同名 DLL があれば <see cref="AssemblyLoadContext.LoadFromAssemblyPath"/>
-/// で fallback 解決する。
-/// </para>
-/// <para>
-/// <see cref="Dispose"/> でイベント購読を解除する。ただし Resonite プロセス終了直前以外で
-/// dispose すると、その後の lazy ロードで <see cref="FileNotFoundException"/> を踏むため、
-/// 通常は plugin ライフタイムと同じ寿命で保持する。
-/// </para>
-/// <para>
-/// 本クラスは <c>ResoniteIO.Core</c> の <c>ILogSink</c> を参照しない。理由:
-/// resolver が <c>Resonite</c> 同梱の Google.Protobuf 等より先に attach 済みで
-/// なければ、plugin folder 同梱の隣接 DLL より旧バージョンが Default 経路から
-/// 解決されて衝突する。<c>ILogSink</c> 経由で <c>BepInExLogSink</c> をここで参照
-/// すると <c>ResoniteIO.Core.dll</c> が早期にロードされ、その時点で
-/// <c>Google.Protobuf</c> を Resonite 側 (旧版) から引きうる。
-/// よって BepInEx の <see cref="ManualLogSource"/> を直接使う。
+/// <c>ILogSink</c> ではなく BepInEx <see cref="ManualLogSource"/> を直接受ける理由:
+/// resolver は Resonite 同梱の旧 Google.Protobuf より先に attach されなければならない。
+/// ここで <c>ILogSink</c> を経由すると <c>ResoniteIO.Core.dll</c> が早期ロードされ、
+/// 同 dll が依存する Google.Protobuf を Resonite 側 (旧版) から引いてしまう。
 /// </para>
 /// </remarks>
 internal sealed class PluginAssemblyResolver : IDisposable

@@ -3,10 +3,6 @@ using Xunit;
 
 namespace ResoniteIO.Core.Tests;
 
-/// <summary>
-/// <see cref="ResoniteIO.Core.Session.SessionHost"/> の起動・停止に伴う socket ファイル
-/// のライフサイクルを検証する。RPC の振る舞いとは別関心事として独立させている。
-/// </summary>
 [Collection("SessionHostEnv")]
 public sealed class SessionHostLifecycleTests
 {

@@ -3,14 +3,6 @@ using ResoniteIO.Core.Logging;
 
 namespace ResoniteIO.Logging;
 
-/// <summary>
-/// Core 層の <see cref="ILogSink"/> を BepInEx <see cref="ManualLogSource"/>
-/// にブリッジする internal アダプタ。
-/// </summary>
-/// <remarks>
-/// Core は BepInEx を直接参照しないため、mod 側で本実装を注入する。
-/// 単純なメッセージ転送のみで、フォーマットや filtering は行わない。
-/// </remarks>
 internal sealed class BepInExLogSink : ILogSink
 {
     private readonly ManualLogSource _source;

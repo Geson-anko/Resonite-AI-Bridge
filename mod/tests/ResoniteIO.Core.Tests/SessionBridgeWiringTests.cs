@@ -4,15 +4,6 @@ using Xunit;
 
 namespace ResoniteIO.Core.Tests;
 
-/// <summary>
-/// <see cref="ResoniteIO.Core.Session.SessionHost.Start(ResoniteIO.Core.Logging.ILogSink, CancellationToken, ISessionBridge?)"/>
-/// に <see cref="ISessionBridge"/> を渡しても host が問題なく起動できる smoke。
-/// </summary>
-/// <remarks>
-/// Ping ラウンドトリップは <see cref="SessionRoundTripTests"/> で別途カバーするので
-/// ここでは重複させない。<c>RESONITE_IO_SOCKET</c> env を扱うため
-/// <see cref="SessionRoundTripTests"/> と同じ collection でシリアル化する。
-/// </remarks>
 [Collection("SessionHostEnv")]
 public sealed class SessionBridgeWiringTests
 {
@@ -23,9 +14,8 @@ public sealed class SessionBridgeWiringTests
 
         await using var harness = await SessionHostHarness.StartAsync(bridge);
 
-        // Service 側がまだ Bridge を consume していないことの裏返し:
-        // 渡した値は変更されずそのまま読み出せる。将来 Service が消費し始めたら
-        // この assertion を緩めて consumer 側に移す。
+        // Service が Bridge をまだ consume していないことを negative space で確認する。
+        // 消費が始まったらこの assertion は consumer 側へ移すべき。
         Assert.Equal("home", bridge.FocusedWorldName);
         Assert.Equal("tester", bridge.LocalUserName);
     }

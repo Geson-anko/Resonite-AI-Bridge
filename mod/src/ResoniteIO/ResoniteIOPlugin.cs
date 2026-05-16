@@ -14,13 +14,10 @@ using ResoniteIO.Logging;
 
 namespace ResoniteIO;
 
-/// <summary>
-/// BepisLoader 経由で Resonite クライアントに読み込まれる mod のエントリポイント。
-/// </summary>
+/// <summary>BepisLoader 経由で Resonite に読み込まれる mod のエントリポイント。</summary>
 /// <remarks>
-/// PluginMetadata 定数は csproj の Version / Authors / PackageId / Product /
-/// RepositoryUrl から BepInEx.ResonitePluginInfoProps が build-time に生成する。
-/// 二重管理を避けるため、本クラスにはメタデータ定数を持たない。
+/// PluginMetadata の各値は csproj から BepInEx.ResonitePluginInfoProps が build-time に
+/// 生成するため、本クラスでは決して定数を二重管理しない。
 /// </remarks>
 [ResonitePlugin(
     PluginMetadata.GUID,
@@ -35,10 +32,6 @@ namespace ResoniteIO;
 )]
 public sealed class ResoniteIOPlugin : BasePlugin
 {
-    /// <summary>
-    /// プラグインから static にアクセスできる BepInEx ログハンドラ。<see cref="Load"/>
-    /// 内で <c>base.Log</c> を代入する Template の慣習に従う。
-    /// </summary>
     internal static new ManualLogSource Log = null!;
 
     private PluginAssemblyResolver? _assemblyResolver;
@@ -47,31 +40,21 @@ public sealed class ResoniteIOPlugin : BasePlugin
     private SessionHost? _sessionHost;
     private FrooxEngineSessionBridge? _sessionBridge;
 
-    /// <summary>
-    /// プラグインロード時に BepInEx ランタイムから呼び出される。
-    /// </summary>
     /// <remarks>
-    /// <para>
-    /// この時点では FrooxEngine の初期化が完了していない可能性があるため、
-    /// Engine.Current 配下に触れる処理は <see cref="OnEngineReady"/> 側に書く。
-    /// </para>
-    /// <para>
-    /// 重要: <see cref="PluginAssemblyResolver"/> attach **以前** に
-    /// <c>ResoniteIO.Core</c> 配下の型 (例: <see cref="BepInExLogSink"/>) を参照しない。
-    /// 参照すると <c>ResoniteIO.Core.dll</c> が早期ロードされ、resolver event が
-    /// 発火する前に Resonite 同梱の旧 <c>Google.Protobuf</c> が解決され、
-    /// その後 <see cref="SessionHost"/> 起動時に
+    /// 重要: PluginAssemblyResolver attach **以前** に <c>ResoniteIO.Core</c> 配下の型
+    /// (<see cref="BepInExLogSink"/> 等) を参照しない。参照すると <c>ResoniteIO.Core.dll</c>
+    /// が早期ロードされ、resolver が発火する前に Resonite 同梱の旧 <c>Google.Protobuf</c>
+    /// が解決され、後の SessionHost 起動で
     /// <c>TypeLoadException: Could not load type 'Google.Protobuf.IBufferMessage'</c>
     /// となる。<see cref="BepInExLogSink"/> の生成は <see cref="OnEngineReady"/> に遅延する。
-    /// </para>
+    /// FrooxEngine 触りも未初期化リスクのため OnEngineReady 側に置く。
     /// </remarks>
     public override void Load()
     {
         Log = base.Log;
 
-        // BepInEx は plugin folder を Default ALC の probe path に登録しないため、
-        // 同梱した ASP.NET Core / gRPC 隣接 DLL を fallback 解決するリゾルバを attach。
-        // ManualLogSource を直接渡し、Core 側型 (BepInExLogSink/ILogSink) を経由しない。
+        // resolver は Core 型に触れる前に attach する必要があるため、ManualLogSource を
+        // 直接渡し ILogSink を経由しない (上記 remarks 参照)。
         var pluginDirectory =
             Path.GetDirectoryName(typeof(ResoniteIOPlugin).Assembly.Location) ?? string.Empty;
         if (!string.IsNullOrEmpty(pluginDirectory))
@@ -83,21 +66,9 @@ public sealed class ResoniteIOPlugin : BasePlugin
         Log.LogInfo($"{PluginMetadata.NAME} {PluginMetadata.VERSION} loaded");
     }
 
-    /// <summary>
-    /// FrooxEngine が完全初期化された後に呼ばれるフック。Session gRPC server を
-    /// Core 側の <see cref="SessionHost"/> でバックグラウンド起動する。
-    /// </summary>
     /// <remarks>
-    /// <para>
-    /// BepInEx 6 <c>BasePlugin</c> には Unload 相当の hook が無いため、停止は
-    /// <see cref="AppDomain.ProcessExit"/> で best-effort に行う。
-    /// <c>Engine.OnShutdown</c> 系の hook 経路 (より早く graceful に停止できる
-    /// 経路) は Step 3 で再評価する。
-    /// </para>
-    /// <para>
-    /// <see cref="SessionHost.Start"/> はバックグラウンドタスクで Kestrel を回す
-    /// ため engine update tick をブロックしない。
-    /// </para>
+    /// BepInEx 6 <c>BasePlugin</c> に Unload hook が無いため、停止は
+    /// <see cref="AppDomain.ProcessExit"/> 経由の best-effort。
     /// </remarks>
     private void OnEngineReady()
     {
@@ -106,19 +77,10 @@ public sealed class ResoniteIOPlugin : BasePlugin
         {
             _hostCts = new CancellationTokenSource();
             AppDomain.CurrentDomain.ProcessExit += OnProcessExit;
-            // Core 側型を参照する最初のポイント。PluginAssemblyResolver は Load() で
-            // attach 済みのため、ResoniteIO.Core.dll および隣接 Google.Protobuf.dll は
-            // plugin folder 同梱版が解決される。
+            // Core 型に触れる最初のポイント。Load() で attach 済みの resolver により
+            // plugin folder 同梱の Core.dll / Google.Protobuf.dll が優先される。
             _logSink = new BepInExLogSink(Log);
-            // FrooxEngine 状態 (FocusedWorld / LocalUser) を Core 側へ露出する。
-            // WorldFocused event をここで購読し、focus 切替時にログ + snapshot を更新。
             _sessionBridge = new FrooxEngineSessionBridge(Engine.Current, _logSink);
-            // SessionHost の default (`$HOME/.resonite-io/`) をそのまま使う。
-            // Steam pressure-vessel は host の `/home/$USER` を sandbox に
-            // pass-through するため、ホスト Python / container Python と
-            // 同じ inode に到達できる (container 側は username が異なるため
-            // `${HOME}/.resonite-io` → `/home/dev/.resonite-io` の bind を
-            // docker-compose.yml で設定済み)。
             _sessionHost = SessionHost.Start(_logSink, _hostCts.Token, _sessionBridge);
             Log.LogInfo($"Session gRPC host bound at: {_sessionHost.SocketPath}");
         }
@@ -128,46 +90,31 @@ public sealed class ResoniteIOPlugin : BasePlugin
         }
     }
 
-    /// <summary>
-    /// プロセス終了時の best-effort cleanup。<see cref="AppDomain.ProcessExit"/>
-    /// から呼ばれる。例外は飲み込む (これ以降ログ出力経路が信頼できないため)。
-    /// </summary>
+    // ProcessExit 経路ではログ出力経路がもう信頼できないため例外は飲む。
     private void OnProcessExit(object? sender, EventArgs e)
     {
         try
         {
             _sessionBridge?.Dispose();
         }
-        catch
-        {
-            // best-effort
-        }
+        catch { }
 
         try
         {
             _hostCts?.Cancel();
         }
-        catch
-        {
-            // best-effort
-        }
+        catch { }
 
         try
         {
             _sessionHost?.DisposeAsync().AsTask().GetAwaiter().GetResult();
         }
-        catch
-        {
-            // best-effort
-        }
+        catch { }
 
         try
         {
             _assemblyResolver?.Dispose();
         }
-        catch
-        {
-            // best-effort
-        }
+        catch { }
     }
 }

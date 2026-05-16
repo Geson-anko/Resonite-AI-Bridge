@@ -1,8 +1,3 @@
-"""Tests for ``resoio/__init__.py``.
-
-Currently only validates ``__version__`` exposure via ``importlib.metadata``.
-"""
-
 import resoio
 
 

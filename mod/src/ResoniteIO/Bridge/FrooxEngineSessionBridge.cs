@@ -6,22 +6,12 @@ using ResoniteIO.Core.Logging;
 namespace ResoniteIO.Bridge;
 
 /// <summary>
-/// FrooxEngine の <see cref="WorldManager.FocusedWorld"/> / <see cref="World.LocalUser"/>
-/// を Core 層へ露出する <see cref="ISessionBridge"/> 実装。
+/// FrooxEngine の FocusedWorld / LocalUser を Core 層へ露出する Bridge 実装。
 /// </summary>
 /// <remarks>
-/// <para>
-/// 実装方針: <see cref="WorldManager.WorldFocused"/> event を購読し、
-/// engine update tick 上で <c>volatile</c> snapshot を更新する。Core 側からの
-/// プロパティ getter は snapshot を best-effort で読むだけなので、任意スレッド
-/// から cost-free に呼べる。値読みで tearing が起きても crash しない
-/// (<c>Sync&lt;string&gt;</c> 経由のため; <see cref="World.Name"/> /
-/// <see cref="User.UserName"/> ともに参照型の代入で publish される)。
-/// </para>
-/// <para>
-/// 構築時に既に focused world が存在する場合は初期スナップショットも 1 回ログ
-/// 出力する (engine ready 直後にホームワールドが既に focus 済みのケースを拾う)。
-/// </para>
+/// getter は <c>volatile</c> snapshot を任意スレッドから読むだけ。<c>World.Name</c> /
+/// <c>User.UserName</c> は <c>Sync&lt;string&gt;</c> 経由で参照型の代入として publish
+/// されるので、読み出しで tearing が起きても crash しない (古い参照が返るだけ)。
 /// </remarks>
 internal sealed class FrooxEngineSessionBridge : ISessionBridge, IDisposable
 {
@@ -38,8 +28,8 @@ internal sealed class FrooxEngineSessionBridge : ISessionBridge, IDisposable
         _worldManager = engine.WorldManager;
         _log = log;
 
-        // 既存 focused world があれば初期 snapshot として採用してログを出す。
-        // event を後から subscribe しても、focus 済み状態は通知されないため。
+        // WorldFocused は新規 focus でしか発火しないため、既に focus 済みの状態は
+        // event 経由では拾えない。subscribe 前に手で初期 snapshot を採る。
         var initialWorld = _worldManager.FocusedWorld;
         if (initialWorld is not null)
         {
@@ -50,10 +40,8 @@ internal sealed class FrooxEngineSessionBridge : ISessionBridge, IDisposable
         _worldManager.WorldFocused += OnWorldFocused;
     }
 
-    /// <inheritdoc />
     public string? FocusedWorldName => _focusedWorld?.Name;
 
-    /// <inheritdoc />
     public string? LocalUserName => _focusedWorld?.LocalUser?.UserName;
 
     private void OnWorldFocused(World world)
@@ -83,7 +71,7 @@ internal sealed class FrooxEngineSessionBridge : ISessionBridge, IDisposable
         }
         catch
         {
-            // best-effort: engine 側が既に破棄されている可能性
+            // engine 側が先に破棄されているケース。
         }
     }
 }
