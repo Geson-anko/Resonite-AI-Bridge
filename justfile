@@ -84,6 +84,18 @@ py-test:
 py-type:
     cd python && uv run pyright
 
+# e2e テストを実行する (実機 Resonite + host-agent が前提)。
+# - 引数なし (name="all"): tests/e2e/ ディレクトリ配下を全て走らせる
+# - 引数あり (例: `just e2e-test session_ping`): tests/e2e/<name>.py のみ走らせる
+# tests/e2e/ 配下のファイルは `test_` prefix を持たず `<scenario>.py` 命名としている。
+# pytest の python_files パターンを `*.py` に override することで collect 対象に含める。
+e2e-test name="all":
+    @if [ "{{ name }}" = "all" ]; then \
+        cd python && uv run pytest tests/e2e/ -m e2e -v --override-ini='python_files=*.py'; \
+    else \
+        cd python && uv run pytest tests/e2e/{{ name }}.py -m e2e -v --override-ini='python_files=*.py'; \
+    fi
+
 # ===== C# (mod/) ========================================================
 
 mod-format:

@@ -28,10 +28,15 @@ when explicitly targeted.
 From the dev container:
 
 ```bash
-cd python && uv run pytest tests/e2e/ -m e2e -v
+just e2e-test               # run every e2e file (default)
+just e2e-test session_ping  # run only tests/e2e/session_ping.py
 ```
 
-The test orchestrates:
+The recipe forwards to `pytest -m e2e` with `--override-ini='python_files=*.py'`
+so files in `tests/e2e/` do not need the `test_` prefix. Each scenario lives
+in its own `<name>.py` to keep the run target self-describing.
+
+`session_ping.py` orchestrates:
 
 - `just resonite-start` (boots Resonite via Gale)
 - Polls `~/.resonite-io/resonite-*.sock` until the mod binds the UDS

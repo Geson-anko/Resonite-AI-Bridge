@@ -5,7 +5,7 @@ Prerequisites:
   - Configure `.env` with a valid Gale profile that has BepisLoader installed.
   - Build the mod once: `just deploy-mod`.
 Then from inside the dev container:
-  cd python && uv run pytest tests/e2e/ -m e2e -v
+  just e2e-test session_ping     # or `just e2e-test` to run every e2e file
 """
 
 from __future__ import annotations
@@ -75,25 +75,29 @@ def _purge_stale_sockets(directory: Path) -> None:
         sock.unlink(missing_ok=True)
 
 
-@pytest.mark.e2e
-def test_session_ping_e2e_smoke() -> None:
-    """Boot Resonite via host-agent, send one Ping, then shut Resonite down."""
-    _purge_stale_sockets(SOCKET_DIR)
-    _run_just("resonite-start")
-    try:
-        socket_path = _wait_for_socket(SOCKET_DIR, SOCKET_APPEAR_TIMEOUT_S)
-        os.environ["RESONITE_IO_SOCKET"] = str(socket_path)
+class TestSessionPing:
+    """Live-Resonite end-to-end smoke for ``Session.Ping``."""
 
-        async def _ping_once() -> None:
-            async with SessionClient() as client:
-                response = await client.ping("e2e-smoke")
-            assert response.message == "e2e-smoke"
-            assert response.server_unix_nanos > 0
-
-        asyncio.run(_ping_once())
-    finally:
-        # Always stop Resonite. check=False because stop may exit non-zero
-        # if Resonite already died for some reason.
-        _run_just("resonite-stop", check=False, timeout=30.0)
-        os.environ.pop("RESONITE_IO_SOCKET", None)
+    @pytest.mark.e2e
+    def test_smoke(self) -> None:
+        """Boot Resonite via host-agent, send one Ping, then shut Resonite
+        down."""
         _purge_stale_sockets(SOCKET_DIR)
+        _run_just("resonite-start")
+        try:
+            socket_path = _wait_for_socket(SOCKET_DIR, SOCKET_APPEAR_TIMEOUT_S)
+            os.environ["RESONITE_IO_SOCKET"] = str(socket_path)
+
+            async def _ping_once() -> None:
+                async with SessionClient() as client:
+                    response = await client.ping("e2e-smoke")
+                assert response.message == "e2e-smoke"
+                assert response.server_unix_nanos > 0
+
+            asyncio.run(_ping_once())
+        finally:
+            # Always stop Resonite. check=False because stop may exit non-zero
+            # if Resonite already died for some reason.
+            _run_just("resonite-stop", check=False, timeout=30.0)
+            os.environ.pop("RESONITE_IO_SOCKET", None)
+            _purge_stale_sockets(SOCKET_DIR)
