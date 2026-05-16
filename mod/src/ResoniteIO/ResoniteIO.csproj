@@ -27,6 +27,10 @@
       - env var 未設定時は repo root の ./gale/ を fallback (host 直叩き用)
       - GalePath ディレクトリが存在しない (CI / Gale 未セットアップ) なら
         Copy を skip する (CI 安全)
+
+    proto / gRPC 依存 (Google.Protobuf / Grpc.Tools / Grpc.Net.Client) は
+    すべて ResoniteIO.Core 側に集約済み。mod 側は Core を ProjectReference
+    するだけで、proto 生成スタブも直接参照しない。
   -->
 
   <PropertyGroup>
@@ -95,22 +99,9 @@
     </Reference>
   </ItemGroup>
 
-  <!-- proto から C# を build-time に生成 (Server スタブのみ) -->
+  <!-- Core 層への参照。proto / Grpc / gRPC server lifecycle は Core が抱える -->
   <ItemGroup>
-    <Protobuf
-      Include="..\..\..\proto\resonite_io\v1\*.proto"
-      ProtoRoot="..\..\..\proto"
-      GrpcServices="Server"
-    />
-  </ItemGroup>
-
-  <ItemGroup>
-    <PackageReference Include="Google.Protobuf" Version="3.30.0" />
-    <PackageReference Include="Grpc.Tools" Version="2.71.0">
-      <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
-      <PrivateAssets>all</PrivateAssets>
-    </PackageReference>
-    <PackageReference Include="Grpc.Net.Client" Version="2.71.0" />
+    <ProjectReference Include="..\ResoniteIO.Core\ResoniteIO.Core.csproj" />
   </ItemGroup>
 
   <!-- テストアセンブリから internal な PluginMetadata を参照できるようにする
@@ -119,13 +110,24 @@
     <InternalsVisibleTo Include="ResoniteIO.Tests" />
   </ItemGroup>
 
-  <!-- $(GalePath)BepInEx/plugins/$(AssemblyName)/ に成果物を配置 -->
+  <!-- $(GalePath)BepInEx/plugins/$(AssemblyName)/ に成果物を配置。
+       Core/Mod 二層構成のため、mod 本体 (ResoniteIO.dll/pdb) に加えて
+       ProjectReference 先の ResoniteIO.Core.dll/pdb もコピーする
+       (Plugin ロード時の type 解決に必要)。 -->
   <Target Name="PostBuild" AfterTargets="PostBuildEvent">
     <ItemGroup>
       <PluginFiles Include="$(TargetPath)" />
       <PluginFiles
         Include="$(TargetDir)$(TargetName).pdb"
         Condition="Exists('$(TargetDir)$(TargetName).pdb')"
+      />
+      <PluginFiles
+        Include="$(TargetDir)ResoniteIO.Core.dll"
+        Condition="Exists('$(TargetDir)ResoniteIO.Core.dll')"
+      />
+      <PluginFiles
+        Include="$(TargetDir)ResoniteIO.Core.pdb"
+        Condition="Exists('$(TargetDir)ResoniteIO.Core.pdb')"
       />
     </ItemGroup>
 

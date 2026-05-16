@@ -1,8 +1,12 @@
+using System;
+using System.Threading;
 using BepInEx;
 using BepInEx.Logging;
 using BepInEx.NET.Common;
 using BepInExResoniteShim;
 using BepisResoniteWrapper;
+using ResoniteIO.Core.Session;
+using ResoniteIO.Logging;
 
 namespace ResoniteIO;
 
@@ -33,6 +37,9 @@ public sealed class ResoniteIOPlugin : BasePlugin
     /// </summary>
     internal static new ManualLogSource Log = null!;
 
+    private CancellationTokenSource? _hostCts;
+    private SessionHost? _sessionHost;
+
     /// <summary>
     /// プラグインロード時に BepInEx ランタイムから呼び出される。
     /// </summary>
@@ -48,11 +55,59 @@ public sealed class ResoniteIOPlugin : BasePlugin
     }
 
     /// <summary>
-    /// FrooxEngine が完全初期化された後に呼ばれるフック。Step 2 以降で
-    /// gRPC server 起動などのモダリティ配線をここに追加する。
+    /// FrooxEngine が完全初期化された後に呼ばれるフック。Session gRPC server を
+    /// Core 側の <see cref="SessionHost"/> でバックグラウンド起動する。
     /// </summary>
+    /// <remarks>
+    /// <para>
+    /// BepInEx 6 <c>BasePlugin</c> には Unload 相当の hook が無いため、停止は
+    /// <see cref="AppDomain.ProcessExit"/> で best-effort に行う。
+    /// <c>Engine.OnShutdown</c> 系の hook 経路 (より早く graceful に停止できる
+    /// 経路) は Step 3 で再評価する。
+    /// </para>
+    /// <para>
+    /// <see cref="SessionHost.Start"/> はバックグラウンドタスクで Kestrel を回す
+    /// ため engine update tick をブロックしない。
+    /// </para>
+    /// </remarks>
     private void OnEngineReady()
     {
-        Log.LogInfo("Engine ready — modality wiring will be added in Step 2+");
+        Log.LogInfo("Engine ready — starting Session gRPC host");
+        try
+        {
+            _hostCts = new CancellationTokenSource();
+            AppDomain.CurrentDomain.ProcessExit += OnProcessExit;
+            _sessionHost = SessionHost.Start(new BepInExLogSink(Log), _hostCts.Token);
+            Log.LogInfo($"Session gRPC host bound at: {_sessionHost.SocketPath}");
+        }
+        catch (Exception ex)
+        {
+            Log.LogError($"Failed to start Session gRPC host: {ex}");
+        }
+    }
+
+    /// <summary>
+    /// プロセス終了時の best-effort cleanup。<see cref="AppDomain.ProcessExit"/>
+    /// から呼ばれる。例外は飲み込む (これ以降ログ出力経路が信頼できないため)。
+    /// </summary>
+    private void OnProcessExit(object? sender, EventArgs e)
+    {
+        try
+        {
+            _hostCts?.Cancel();
+        }
+        catch
+        {
+            // best-effort
+        }
+
+        try
+        {
+            _sessionHost?.DisposeAsync().AsTask().GetAwaiter().GetResult();
+        }
+        catch
+        {
+            // best-effort
+        }
     }
 }
