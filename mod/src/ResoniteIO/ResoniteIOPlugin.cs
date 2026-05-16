@@ -8,6 +8,8 @@ using BepInEx.Logging;
 using BepInEx.NET.Common;
 using BepInExResoniteShim;
 using BepisResoniteWrapper;
+using FrooxEngine;
+using ResoniteIO.Bridge;
 using ResoniteIO.Core.Session;
 using ResoniteIO.Logging;
 
@@ -42,6 +44,7 @@ public sealed class ResoniteIOPlugin : BasePlugin
 
     private CancellationTokenSource? _hostCts;
     private SessionHost? _sessionHost;
+    private FrooxEngineSessionBridge? _sessionBridge;
 
     /// <summary>
     /// プラグインロード時に BepInEx ランタイムから呼び出される。
@@ -127,13 +130,17 @@ public sealed class ResoniteIOPlugin : BasePlugin
         {
             _hostCts = new CancellationTokenSource();
             AppDomain.CurrentDomain.ProcessExit += OnProcessExit;
+            var log = new BepInExLogSink(Log);
+            // FrooxEngine 状態 (FocusedWorld / LocalUser) を Core 側へ露出する。
+            // WorldFocused event をここで購読し、focus 切替時にログ + snapshot を更新。
+            _sessionBridge = new FrooxEngineSessionBridge(Engine.Current, log);
             // SessionHost の default (`$HOME/.resonite-io/`) をそのまま使う。
             // Steam pressure-vessel は host の `/home/$USER` を sandbox に
             // pass-through するため、ホスト Python / container Python と
             // 同じ inode に到達できる (container 側は username が異なるため
             // `${HOME}/.resonite-io` → `/home/dev/.resonite-io` の bind を
             // docker-compose.yml で設定済み)。
-            _sessionHost = SessionHost.Start(new BepInExLogSink(Log), _hostCts.Token);
+            _sessionHost = SessionHost.Start(log, _hostCts.Token, _sessionBridge);
             Log.LogInfo($"Session gRPC host bound at: {_sessionHost.SocketPath}");
         }
         catch (Exception ex)
@@ -148,6 +155,15 @@ public sealed class ResoniteIOPlugin : BasePlugin
     /// </summary>
     private void OnProcessExit(object? sender, EventArgs e)
     {
+        try
+        {
+            _sessionBridge?.Dispose();
+        }
+        catch
+        {
+            // best-effort
+        }
+
         try
         {
             _hostCts?.Cancel();

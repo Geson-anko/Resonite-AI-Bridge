@@ -56,14 +56,23 @@
    [Info   :   BepInEx] Loading [ResoniteIO 0.1.0]
    [Info   :ResoniteIO] ResoniteIO 0.1.0 loaded
    ...
-   [Info   :ResoniteIO] Engine ready — modality wiring will be added in Step 2+
+   [Info   :ResoniteIO] Engine ready — starting Session gRPC host
+   [Info   :ResoniteIO] SessionHost binding UDS at /home/<user>/.resonite-io/resonite-<pid>.sock
+   [Info   :ResoniteIO] SessionHost listening on /home/<user>/.resonite-io/resonite-<pid>.sock
+   [Info   :ResoniteIO] Session gRPC host bound at: /home/<user>/.resonite-io/resonite-<pid>.sock
+   ...
+   [Info   :ResoniteIO] Focused world: <ホームワールド名> / LocalUser: <自分の UserName>
    ```
 
-   `ResoniteIO 0.1.0 loaded` が `BasePlugin.Load()` の出力、`Engine ready ...` が `OnEngineReady` フックの出力。両方確認できれば mod が正しく BepisLoader + Shim 経由で読み込まれ、FrooxEngine の初期化フックも生きていることが分かる。
+   `loaded` が `BasePlugin.Load()` の出力、`Engine ready ...` 以降が `OnEngineReady`
+   フックでの Bridge 構築 + SessionHost 起動経路。`Focused world: ...` 行は
+   `FrooxEngineSessionBridge` が `WorldManager.WorldFocused` event で更新時に出力する
+   (ホームワールド読み込み完了タイミング)。
 
 ## 期待結果
 
-- 上記 2 行 (`loaded` と `Engine ready`) が `gale/BepInEx/LogOutput.log` に出る
+- `loaded` / `Engine ready` / `SessionHost listening` / `Focused world: ...` の 4 行が
+  `gale/BepInEx/LogOutput.log` に時系列で出る
 - Resonite 起動後にエラーダイアログ等が出ない
 - Gale で profile に追加した他の mod (Shim 等) と共存できる
 

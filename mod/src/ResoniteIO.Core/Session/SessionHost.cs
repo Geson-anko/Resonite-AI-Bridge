@@ -4,6 +4,7 @@ using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Server.Kestrel.Core;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
+using ResoniteIO.Core.Bridge;
 using ResoniteIO.Core.Logging;
 
 namespace ResoniteIO.Core.Session;
@@ -72,12 +73,21 @@ public sealed class SessionHost : IAsyncDisposable
     /// <paramref name="cancellationToken"/> 経由で行う。
     /// </summary>
     /// <param name="log">Core が利用するログシンク。Service にも DI 経由で渡される。</param>
+    /// <param name="bridge">
+    /// Mod 側から注入される engine 状態の露出 IF。<c>null</c> でも host は起動できる
+    /// (Core 単体テストや engine 非依存の用途を想定)。non-null なら DI コンテナに
+    /// シングルトン登録され、将来 Service / interceptor が consume する余地を持つ。
+    /// </param>
     /// <param name="cancellationToken">サーバの停止トリガ。</param>
     /// <exception cref="InvalidOperationException">
     /// 環境変数経由でも <c>$HOME/.resonite-io/</c> でも socket path を
     /// 解決できなかった場合 (<c>HOME</c> 未設定環境)。
     /// </exception>
-    public static SessionHost Start(ILogSink log, CancellationToken cancellationToken)
+    public static SessionHost Start(
+        ILogSink log,
+        CancellationToken cancellationToken,
+        ISessionBridge? bridge = null
+    )
     {
         ArgumentNullException.ThrowIfNull(log);
 
@@ -94,6 +104,10 @@ public sealed class SessionHost : IAsyncDisposable
         var builder = WebApplication.CreateSlimBuilder();
         builder.Services.AddGrpc();
         builder.Services.AddSingleton(log);
+        if (bridge is not null)
+        {
+            builder.Services.AddSingleton(bridge);
+        }
         builder.WebHost.ConfigureKestrel(opts =>
         {
             opts.ListenUnixSocket(

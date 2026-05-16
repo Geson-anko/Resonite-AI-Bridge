@@ -12,6 +12,13 @@ namespace ResoniteIO.Core.Tests;
 /// <see cref="Grpc.Net.Client.GrpcChannel"/> から実 RPC を投げて
 /// Ping echo と <c>server_unix_nanos</c> を検証する統合テスト。
 /// </summary>
+/// <remarks>
+/// 同一 process の <c>RESONITE_IO_SOCKET</c> env var を読み書きするため、
+/// 同じく env var を触る他のテスト ((<see cref="SessionBridgeWiringTests"/> 等))
+/// と並列で走ると socket path が混線する。xunit collection
+/// <c>"SessionHostEnv"</c> でシリアル化する。
+/// </remarks>
+[Collection("SessionHostEnv")]
 public sealed class SessionRoundTripTests
 {
     [Fact]
