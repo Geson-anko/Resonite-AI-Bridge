@@ -21,17 +21,16 @@ import pytest
 from resoio.session import SessionClient
 
 REPO_ROOT = Path(__file__).resolve().parents[3]
-SOCKET_DIR_REL = "resonite-io"
+# Steam Linux Runtime (pressure-vessel) は /run/user/<UID>/ を sandbox 内で
+# 別 tmpfs に overlay するため、Resonite mod が UDS socket を XDG_RUNTIME_DIR
+# 配下に作っても container からは見えない。Mod は plugin 自身の deploy ディレクトリ
+# (gale/BepInEx/plugins/ResoniteIO/) を socket dir のデフォルトに使うため、
+# E2E ではそのディレクトリを観測する。Plugin folder は /workspace/gale/ 経由で
+# host と container が同じ inode を共有する。
+SOCKET_DIR: Path = REPO_ROOT / "gale" / "BepInEx" / "plugins" / "ResoniteIO"
 SOCKET_GLOB = "resonite-*.sock"
 SOCKET_APPEAR_TIMEOUT_S = 120.0
 SOCKET_APPEAR_POLL_S = 1.0
-
-
-def _socket_dir() -> Path:
-    xdg = os.environ.get("XDG_RUNTIME_DIR")
-    if not xdg:
-        pytest.fail("XDG_RUNTIME_DIR is not set in this environment.")
-    return Path(xdg) / SOCKET_DIR_REL
 
 
 def _wait_for_socket(directory: Path, timeout_s: float) -> Path:
@@ -68,7 +67,7 @@ def test_session_ping_e2e_smoke() -> None:
     """Boot Resonite via host-agent, send one Ping, then shut Resonite down."""
     _run_just("resonite-start")
     try:
-        socket_path = _wait_for_socket(_socket_dir(), SOCKET_APPEAR_TIMEOUT_S)
+        socket_path = _wait_for_socket(SOCKET_DIR, SOCKET_APPEAR_TIMEOUT_S)
         os.environ["RESONITE_IO_SOCKET"] = str(socket_path)
 
         async def _ping_once() -> None:

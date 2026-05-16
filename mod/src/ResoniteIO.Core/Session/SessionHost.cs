@@ -20,8 +20,15 @@ namespace ResoniteIO.Core.Session;
 ///   <item>環境変数 <c>RESONITE_IO_SOCKET</c> (フルパス指定; 主にテスト用途)</item>
 ///   <item>環境変数 <c>RESONITE_IO_SOCKET_DIR</c> 配下に
 ///     <c>resonite-{pid}.sock</c></item>
+///   <item><see cref="Start"/> の <c>defaultSocketDir</c> 引数で渡されたディレクトリ
+///     配下に <c>resonite-{pid}.sock</c>。Mod 層が plugin 自身の
+///     deploy ディレクトリ (gale 経由で <c>/workspace</c> bind mount に乗る)
+///     を渡すことで Steam pressure-vessel sandbox / Docker container 間で
+///     filesystem 共有が成立する</item>
 ///   <item><c>$XDG_RUNTIME_DIR/resonite-io/</c> 配下に
-///     <c>resonite-{pid}.sock</c></item>
+///     <c>resonite-{pid}.sock</c> (上記が無いときの最終フォールバック。
+///     pressure-vessel 配下では <c>/run/user/&lt;UID&gt;/</c> が sandbox 内
+///     tmpfs に overlay されるため共有不可)</item>
 /// </list>
 /// <para>
 /// 上記いずれも解決できない場合は <see cref="InvalidOperationException"/>。
@@ -64,14 +71,26 @@ public sealed class SessionHost : IAsyncDisposable
     /// </summary>
     /// <param name="log">Core が利用するログシンク。Service にも DI 経由で渡される。</param>
     /// <param name="cancellationToken">サーバの停止トリガ。</param>
+    /// <param name="defaultSocketDir">
+    /// 環境変数 <c>RESONITE_IO_SOCKET</c> / <c>RESONITE_IO_SOCKET_DIR</c> いずれも
+    /// 未設定のときに使う socket 配置ディレクトリ。Mod 層 (BepInEx plugin) は
+    /// plugin 自身の deploy ディレクトリを渡すことで pressure-vessel sandbox と
+    /// host (container) 間の bind-mount 共有を成立させる。<c>null</c> なら最終
+    /// フォールバックとして <c>$XDG_RUNTIME_DIR/resonite-io/</c> が使われる。
+    /// </param>
     /// <exception cref="InvalidOperationException">
-    /// 環境変数経由でも <c>XDG_RUNTIME_DIR</c> でも socket path を解決できなかった場合。
+    /// 環境変数経由でも <paramref name="defaultSocketDir"/> でも
+    /// <c>XDG_RUNTIME_DIR</c> でも socket path を解決できなかった場合。
     /// </exception>
-    public static SessionHost Start(ILogSink log, CancellationToken cancellationToken)
+    public static SessionHost Start(
+        ILogSink log,
+        CancellationToken cancellationToken,
+        string? defaultSocketDir = null
+    )
     {
         ArgumentNullException.ThrowIfNull(log);
 
-        var socketPath = ResolveSocketPath();
+        var socketPath = ResolveSocketPath(defaultSocketDir);
 
         var socketDir = Path.GetDirectoryName(socketPath);
         if (!string.IsNullOrEmpty(socketDir))
@@ -100,7 +119,42 @@ public sealed class SessionHost : IAsyncDisposable
 
         log.LogInfo($"SessionHost binding UDS at {socketPath}");
 
-        var runTask = Task.Run(() => app.RunAsync(cancellationToken), CancellationToken.None);
+        // StartAsync で Kestrel が listen を完了するまで同期的に待つ。
+        // この時点で UDS socket が filesystem に現れている保証が得られる。
+        try
+        {
+            app.StartAsync(cancellationToken).GetAwaiter().GetResult();
+        }
+        catch (Exception ex)
+        {
+            log.LogError($"SessionHost failed to start Kestrel: {ex}");
+            AppDomain.CurrentDomain.ProcessExit -= processExitHandler;
+            TryUnlink(socketPath);
+            app.DisposeAsync().AsTask().GetAwaiter().GetResult();
+            throw;
+        }
+
+        log.LogInfo($"SessionHost listening on {socketPath}");
+
+        // shutdown 待ちは background task で。停止時例外は警告ログのみ。
+        var runTask = Task.Run(
+            async () =>
+            {
+                try
+                {
+                    await app.WaitForShutdownAsync(cancellationToken).ConfigureAwait(false);
+                }
+                catch (OperationCanceledException)
+                {
+                    // 期待される。
+                }
+                catch (Exception ex)
+                {
+                    log.LogError($"SessionHost runTask faulted: {ex}");
+                }
+            },
+            CancellationToken.None
+        );
 
         return new SessionHost(app, log, socketPath, processExitHandler, runTask);
     }
@@ -142,7 +196,7 @@ public sealed class SessionHost : IAsyncDisposable
         TryUnlink(SocketPath);
     }
 
-    private static string ResolveSocketPath()
+    private static string ResolveSocketPath(string? defaultSocketDir)
     {
         var explicitPath = Environment.GetEnvironmentVariable("RESONITE_IO_SOCKET");
         if (!string.IsNullOrEmpty(explicitPath))
@@ -159,6 +213,11 @@ public sealed class SessionHost : IAsyncDisposable
             return Path.Combine(socketDir, socketName);
         }
 
+        if (!string.IsNullOrEmpty(defaultSocketDir))
+        {
+            return Path.Combine(defaultSocketDir, socketName);
+        }
+
         var xdg = Environment.GetEnvironmentVariable("XDG_RUNTIME_DIR");
         if (!string.IsNullOrEmpty(xdg))
         {
@@ -167,7 +226,7 @@ public sealed class SessionHost : IAsyncDisposable
 
         throw new InvalidOperationException(
             "Cannot resolve UDS path: set RESONITE_IO_SOCKET, RESONITE_IO_SOCKET_DIR, "
-                + "or XDG_RUNTIME_DIR."
+                + "pass defaultSocketDir, or define XDG_RUNTIME_DIR."
         );
     }
 

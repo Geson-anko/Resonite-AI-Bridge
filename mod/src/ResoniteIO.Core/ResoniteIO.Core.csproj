@@ -14,9 +14,11 @@
 
     依存パッケージ: Grpc.AspNetCore.Server が必要なランタイム依存
     (Microsoft.AspNetCore.* / Microsoft.Extensions.* / System.IO.Pipelines) を
-    transitive に持ち込む。Resonite と衝突しうるバージョン skew を避けるため
-    本 csproj では Grpc.AspNetCore.Server / Google.Protobuf / Grpc.Tools のみを
-    明示参照し、AspNetCore / Extensions ファミリーは明示参照しない。
+    transitive に持ち込む。Core.Tests は dotnet test 経由で実行されるので
+    .NET SDK 導入の shared framework (Microsoft.AspNetCore.App) を hostpolicy
+    が自動解決する。Mod 側は BepInEx AssemblyLoadContext のため隣接 DLL が
+    必要 → Mod csproj 側で同 framework から DLL をコピーして同梱する
+    (plan §7 の Kestrel deps リスクへの対処)。
   -->
 
   <PropertyGroup>

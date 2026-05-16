@@ -1,4 +1,7 @@
 using System;
+using System.IO;
+using System.Reflection;
+using System.Runtime.Loader;
 using System.Threading;
 using BepInEx;
 using BepInEx.Logging;
@@ -50,8 +53,53 @@ public sealed class ResoniteIOPlugin : BasePlugin
     public override void Load()
     {
         Log = base.Log;
+        AssemblyLoadContext.Default.Resolving += ResolveFromPluginDirectory;
         ResoniteHooks.OnEngineReady += OnEngineReady;
         Log.LogInfo($"{PluginMetadata.NAME} {PluginMetadata.VERSION} loaded");
+    }
+
+    /// <summary>
+    /// 同梱した ASP.NET Core / gRPC ランタイム DLL を plugin folder から解決する。
+    /// </summary>
+    /// <remarks>
+    /// BepInEx は plugin folder を Default AssemblyLoadContext の probe path に
+    /// 追加しないため、`Microsoft.AspNetCore` など Core が遅延 load する
+    /// 隣接 DLL を runtime が見つけられない。Plugin の置かれたディレクトリを
+    /// 自前で probe して読み込む。
+    /// </remarks>
+    private static Assembly? ResolveFromPluginDirectory(
+        AssemblyLoadContext context,
+        AssemblyName assemblyName
+    )
+    {
+        if (assemblyName.Name is null)
+        {
+            return null;
+        }
+
+        var pluginDirectory = Path.GetDirectoryName(typeof(ResoniteIOPlugin).Assembly.Location);
+        if (string.IsNullOrEmpty(pluginDirectory))
+        {
+            return null;
+        }
+
+        var candidate = Path.Combine(pluginDirectory, $"{assemblyName.Name}.dll");
+        if (!File.Exists(candidate))
+        {
+            return null;
+        }
+
+        try
+        {
+            return context.LoadFromAssemblyPath(candidate);
+        }
+        catch (Exception ex)
+        {
+            Log.LogWarning(
+                $"Failed to resolve '{assemblyName.Name}' from plugin folder: {ex.Message}"
+            );
+            return null;
+        }
     }
 
     /// <summary>
@@ -77,7 +125,13 @@ public sealed class ResoniteIOPlugin : BasePlugin
         {
             _hostCts = new CancellationTokenSource();
             AppDomain.CurrentDomain.ProcessExit += OnProcessExit;
-            _sessionHost = SessionHost.Start(new BepInExLogSink(Log), _hostCts.Token);
+            // Plugin の deploy ディレクトリ (gale/BepInEx/plugins/ResoniteIO/) を
+            // socket dir のデフォルトに使う。gale 経由 deploy 先は host repo の
+            // ./gale/ に bind されており container `/workspace/gale/...` と
+            // 同じ inode を指すため、Steam pressure-vessel sandbox / container 間で
+            // UDS socket を共有できる。
+            var pluginDir = Path.GetDirectoryName(typeof(ResoniteIOPlugin).Assembly.Location);
+            _sessionHost = SessionHost.Start(new BepInExLogSink(Log), _hostCts.Token, pluginDir);
             Log.LogInfo($"Session gRPC host bound at: {_sessionHost.SocketPath}");
         }
         catch (Exception ex)
