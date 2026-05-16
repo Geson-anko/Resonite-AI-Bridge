@@ -1,6 +1,11 @@
 {
+    "allow": [
+      "Read",
+      "Bash"
+    ],
   "permissions": {
     "defaultMode": "bypassPermissions",
     "skipDangerousModePermissionPrompt": true
-  }
+  },
+  "agentPushNotifEnabled": true
 }

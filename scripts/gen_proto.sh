@@ -69,7 +69,7 @@ main() {
   # `betterproto2_compiler` は pyproject.toml の dev グループに固定済み。
   # extra `[compiler]` は betterproto2 にはなく、独立 distribution として
   # 配布されているため `--with` での解決は使わない。
-  log "Running protoc with python_betterproto2 plugin (server_generation=async)..."
+  log "Running protoc with python_betterproto2 plugin (server_generation=async, client_generation=async)..."
   (
     cd "$PYTHON_PROJECT"
     uv run -- \
@@ -77,6 +77,7 @@ main() {
       -I "$PROTO_DIR" \
       --python_betterproto2_out="$PYTHON_OUT" \
       --python_betterproto2_opt=server_generation=async \
+      --python_betterproto2_opt=client_generation=async \
       "${proto_files[@]}"
   )
 

@@ -1,0 +1,1 @@
+- [Step 2 must-keep WHYs](project_step2_must_keep_whys.md) — load-bearing comments under `mod/src/ResoniteIO/` and Core tests that future trim passes must preserve

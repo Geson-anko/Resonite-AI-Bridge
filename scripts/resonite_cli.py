@@ -17,7 +17,7 @@ import sys
 from pathlib import Path
 from typing import Any
 
-DEFAULT_SOCKET_REL = "resonite-io-debug/host-agent.sock"
+DEFAULT_SOCKET_REL = ".resonite-io-debug/host-agent.sock"
 CONNECT_TIMEOUT_SEC = 5.0
 READ_TIMEOUT_SEC = 30.0  # stop は最大 3 秒待ち + α
 MAX_RESPONSE_BYTES = 65536
@@ -33,14 +33,14 @@ EXIT_NO_SOCKET = 3
 
 
 def _default_socket_path() -> Path:
-    rt = os.environ.get("XDG_RUNTIME_DIR", "")
-    if not rt:
+    home = os.environ.get("HOME", "")
+    if not home:
         print(
-            "ERROR: XDG_RUNTIME_DIR が未設定です。systemd-logind セッション内で実行してください。",
+            "ERROR: HOME が未設定です。通常の login session で実行してください。",
             file=sys.stderr,
         )
         sys.exit(EXIT_NO_SOCKET)
-    return Path(rt) / DEFAULT_SOCKET_REL
+    return Path(home) / DEFAULT_SOCKET_REL
 
 
 def _resolve_profile(arg: str | None) -> str:
@@ -93,7 +93,7 @@ def _send_request(sock_path: Path, request: dict[str, Any]) -> dict[str, Any]:
             file=sys.stderr,
         )
         sys.exit(EXIT_NO_SOCKET)
-    except socket.timeout:
+    except TimeoutError:
         print("ERROR: host-agent の応答が timeout しました。", file=sys.stderr)
         sys.exit(EXIT_ACTION_FAILED)
     except OSError as e:
@@ -107,7 +107,10 @@ def _send_request(sock_path: Path, request: dict[str, Any]) -> dict[str, Any]:
         print(f"ERROR: host-agent から不正な応答: {e}", file=sys.stderr)
         sys.exit(EXIT_ACTION_FAILED)
     if not isinstance(parsed, dict):
-        print("ERROR: host-agent から JSON オブジェクト以外が返されました。", file=sys.stderr)
+        print(
+            "ERROR: host-agent から JSON オブジェクト以外が返されました。",
+            file=sys.stderr,
+        )
         sys.exit(EXIT_ACTION_FAILED)
     return parsed
 
@@ -118,12 +121,14 @@ def _print_response(response: dict[str, Any]) -> int:
 
 
 def _parse_args(argv: list[str]) -> argparse.Namespace:
-    parser = argparse.ArgumentParser(description="Container-side client for the host debug bridge.")
+    parser = argparse.ArgumentParser(
+        description="Container-side client for the host debug bridge."
+    )
     parser.add_argument(
         "--socket",
         type=Path,
         default=None,
-        help="override UDS path (default: $XDG_RUNTIME_DIR/resonite-io-debug/host-agent.sock)",
+        help="override UDS path (default: $HOME/.resonite-io-debug/host-agent.sock)",
     )
     sub = parser.add_subparsers(dest="action", required=True)
 

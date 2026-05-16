@@ -32,6 +32,9 @@ addopts = [
   "--durations=0",
   "--strict-markers",
 ]
+markers = [
+  "e2e: end-to-end tests that require host-agent and a live Resonite client",
+]
 filterwarnings = [
   "ignore::DeprecationWarning",
   "ignore::UserWarning",
@@ -40,7 +43,13 @@ log_cli = true
 log_level = "INFO"
 
 minversion = "6.0"
-testpaths = "tests/"
+# Default collection is unit tests only. e2e は test_ prefix を持たないファイル
+# 構成にしており (tests/e2e/<name>.py)、`just e2e-test` 経由で明示的にパスを
+# 渡したときだけ collect される。
+testpaths = "tests/resoio"
+# tests/helpers.py を `from tests.helpers import ...` で解決させるため、
+# python/ を sys.path に追加する。
+pythonpath = "."
 asyncio_default_fixture_loop_scope = "function"
 asyncio_mode = "auto"
 

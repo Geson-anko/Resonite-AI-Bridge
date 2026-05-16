@@ -27,6 +27,10 @@
       - env var 未設定時は repo root の ./gale/ を fallback (host 直叩き用)
       - GalePath ディレクトリが存在しない (CI / Gale 未セットアップ) なら
         Copy を skip する (CI 安全)
+
+    proto / gRPC 依存 (Google.Protobuf / Grpc.Tools / Grpc.Net.Client) は
+    すべて ResoniteIO.Core 側に集約済み。mod 側は Core を ProjectReference
+    するだけで、proto 生成スタブも直接参照しない。
   -->
 
   <PropertyGroup>
@@ -47,6 +51,18 @@
     <AppendTargetFrameworkToOutputPath>false</AppendTargetFrameworkToOutputPath>
     <CopyToPlugins>true</CopyToPlugins>
     <ThunderstorePackable>true</ThunderstorePackable>
+
+    <!--
+      Core が引っ張る Grpc.AspNetCore.Server / Microsoft.AspNetCore.* /
+      Microsoft.Extensions.* / System.IO.Pipelines 等の transitive ランタイム
+      DLL を bin/ にコピーする。BepInEx は通常の AssemblyLoadContext で
+      plugin フォルダから DLL を解決するため、deps.json 経由の nuget cache
+      lookup は効かない (= 隣接 DLL が必須)。Resonite (Unity) は AspNetCore を
+      持っていないので衝突は起きないはずだが、.NET ランタイム標準 DLL との
+      version skew 可能性は残る。実機で plugin がロードできるかは Phase 4
+      (E2E 検証) の宿題として残す。
+    -->
+    <CopyLocalLockFileAssemblies>true</CopyLocalLockFileAssemblies>
 
     <!-- Resonite 実行ディレクトリ解決 (FrooxEngine.dll 等の HintPath 参照専用):
          env var → Steam Win → Steam Linux -->
@@ -95,22 +111,9 @@
     </Reference>
   </ItemGroup>
 
-  <!-- proto から C# を build-time に生成 (Server スタブのみ) -->
+  <!-- Core 層への参照。proto / Grpc / gRPC server lifecycle は Core が抱える -->
   <ItemGroup>
-    <Protobuf
-      Include="..\..\..\proto\resonite_io\v1\*.proto"
-      ProtoRoot="..\..\..\proto"
-      GrpcServices="Server"
-    />
-  </ItemGroup>
-
-  <ItemGroup>
-    <PackageReference Include="Google.Protobuf" Version="3.30.0" />
-    <PackageReference Include="Grpc.Tools" Version="2.71.0">
-      <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
-      <PrivateAssets>all</PrivateAssets>
-    </PackageReference>
-    <PackageReference Include="Grpc.Net.Client" Version="2.71.0" />
+    <ProjectReference Include="..\ResoniteIO.Core\ResoniteIO.Core.csproj" />
   </ItemGroup>
 
   <!-- テストアセンブリから internal な PluginMetadata を参照できるようにする
@@ -119,14 +122,77 @@
     <InternalsVisibleTo Include="ResoniteIO.Tests" />
   </ItemGroup>
 
-  <!-- $(GalePath)BepInEx/plugins/$(AssemblyName)/ に成果物を配置 -->
+  <!--
+    Resonite (Renderite.Host) は .NET 10 CLR (Microsoft.NETCore.App) を
+    同梱するが ASP.NET Core shared framework (Microsoft.AspNetCore.App) は
+    同梱していないため、Kestrel ベースの SessionHost が起動時に
+    Microsoft.AspNetCore.dll 等を解決できない。
+    そこで .NET SDK 導入の shared framework
+    (`$(NetCoreRoot)shared/Microsoft.AspNetCore.App/<version>/`) から
+    全 *.dll を Mod の TargetDir にコピーして、PostBuild で plugin folder に
+    同梱する (plan §7 Kestrel deps リスクへの対処)。
+  -->
+  <Target
+    Name="CopyAspNetCoreSharedFrameworkRuntime"
+    AfterTargets="Build"
+    BeforeTargets="PostBuild"
+    Condition="'$(NetCoreRoot)' != ''"
+  >
+    <PropertyGroup>
+      <_AspNetCoreSharedFrameworkDir>$(NetCoreRoot)shared\Microsoft.AspNetCore.App\$(BundledNETCoreAppPackageVersion)\</_AspNetCoreSharedFrameworkDir>
+    </PropertyGroup>
+    <ItemGroup>
+      <_AspNetCoreSharedFrameworkFiles Include="$(_AspNetCoreSharedFrameworkDir)*.dll" />
+    </ItemGroup>
+    <Message
+      Text="Importing ASP.NET Core shared framework from $(_AspNetCoreSharedFrameworkDir) (@(_AspNetCoreSharedFrameworkFiles->Count()) files)"
+      Importance="high"
+    />
+    <Copy
+      SourceFiles="@(_AspNetCoreSharedFrameworkFiles)"
+      DestinationFolder="$(TargetDir)"
+      SkipUnchangedFiles="true"
+    />
+  </Target>
+
+  <!-- $(GalePath)BepInEx/plugins/$(AssemblyName)/ に成果物を配置。
+       Core/Mod 二層構成のため、mod 本体 (ResoniteIO.dll/pdb) に加えて
+       ProjectReference 先の ResoniteIO.Core.dll/pdb もコピーする
+       (Plugin ロード時の type 解決に必要)。
+       さらに Core が transitive に持ち込む gRPC/Protobuf ランタイム DLL と
+       上記 Target が同梱する ASP.NET Core shared framework DLL を一括コピー。
+
+       BepInExResoniteShim / BepisResoniteWrapper は Gale プロファイルが
+       canonical 版を install するので **除外**。0Harmony 系も BepInEx
+       本体が提供するので除外。 -->
   <Target Name="PostBuild" AfterTargets="PostBuildEvent">
     <ItemGroup>
+      <!-- mod 本体 -->
       <PluginFiles Include="$(TargetPath)" />
       <PluginFiles
         Include="$(TargetDir)$(TargetName).pdb"
         Condition="Exists('$(TargetDir)$(TargetName).pdb')"
       />
+      <!-- Core 層 + transitive gRPC/Protobuf runtime -->
+      <PluginFiles Include="$(TargetDir)ResoniteIO.Core.dll" />
+      <PluginFiles
+        Include="$(TargetDir)ResoniteIO.Core.pdb"
+        Condition="Exists('$(TargetDir)ResoniteIO.Core.pdb')"
+      />
+      <PluginFiles Include="$(TargetDir)Google.Protobuf.dll" />
+      <PluginFiles Include="$(TargetDir)Grpc.*.dll" />
+      <!-- ASP.NET Core shared framework runtime (本 csproj の上の Target が同梱)。
+           Microsoft.AspNetCore* で umbrella (Microsoft.AspNetCore.dll) と
+           sub modules (Microsoft.AspNetCore.Hosting.dll 等) の両方を拾う。
+           System.IO.Pipelines.dll は NETCore.App 側にあり Resonite ランタイム
+           に存在するためここでは include しない。 -->
+      <PluginFiles Include="$(TargetDir)Microsoft.AspNetCore*.dll" />
+      <PluginFiles Include="$(TargetDir)Microsoft.Extensions.*.dll" />
+      <PluginFiles Include="$(TargetDir)Microsoft.Net.Http.Headers.dll" />
+      <!-- Gale 同梱の canonical 版と衝突するため除外 -->
+      <PluginFiles Remove="$(TargetDir)BepInExResoniteShim.dll" />
+      <PluginFiles Remove="$(TargetDir)BepisResoniteWrapper.dll" />
+      <PluginFiles Remove="$(TargetDir)0Harmony.dll" />
     </ItemGroup>
 
     <Copy
@@ -135,7 +201,7 @@
       Condition="'$(CopyToPlugins)' == 'true' and '$(GalePath)' != '' and Exists('$(GalePath)')"
     />
     <Message
-      Text="Copied plugin files to $(PluginTargetDir)"
+      Text="Copied @(PluginFiles->Count()) plugin files to $(PluginTargetDir)"
       Importance="high"
       Condition="'$(CopyToPlugins)' == 'true' and '$(GalePath)' != '' and Exists('$(GalePath)')"
     />
