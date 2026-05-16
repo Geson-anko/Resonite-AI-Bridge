@@ -13,7 +13,7 @@ python/            Python 側 (resoio, uv + betterproto2 + grpclib)
 scripts/           gen_proto / decompile / container-init のシェルスクリプト
 gale/              Gale (Resonite mod manager) profile 展開先 (gitignore、host で Gale が管理)
 Dockerfile         開発コンテナ image (debian + .NET 10 + uv + protoc)
-docker-compose.yml dev サービス定義 (host UID/GID 一致 / ResonitePath bind / Gale profile bind)
+docker-compose.yml dev サービス定義 (host UID/GID 一致 / repo を /workspace に bind / ResonitePath bind)
 justfile           ルートタスクランナー (全レシピ)
 ```
 
@@ -23,30 +23,31 @@ justfile           ルートタスクランナー (全レシピ)
 
 開発ツール (.NET 10 SDK / uv / protoc / pre-commit など) はすべてコンテナ内に閉じている。
 
-### 1. 事前準備: Gale プロファイル作成
+### 1. 一括初期化: `just init`
 
-mod は host Resonite を汚さず、repo root の `./gale/` を Gale のカスタムプロファイルとして使う。
+clone 直後に host 上で 1 度だけ実行する。docker / docker compose v2 を検出し、
+`.env` を `.env.example` から作成 (作成時は `$EDITOR` を起動)、`ResonitePath` 検証、
+Gale プロファイルの設置確認までを順に行う。
+
+```sh
+just init
+```
+
+Gale プロファイル未設置時は手順を表示して exit する。表示通りに以下を host で実施し、
+完了後 `just init` を再実行する:
 
 1. host に Gale v1.5.4+ をインストール ([github.com/Kesomannen/gale](https://github.com/Kesomannen/gale))
-2. Gale でプロファイルを新規作成し、パス指定欄に `<repo>/gale` を入力
+2. Gale GUI で 'Create profile' を選び、パスに `<repo>/gale` を指定
+   (**このパスは EMPTY である必要がある — `gale/` ディレクトリを事前に作らない**)
 3. profile に以下を install:
    - `ResoniteModding-BepisLoader` (>=1.5.1)
    - `ResoniteModding-BepInExResoniteShim` (>=0.9.3)
    - `ResoniteModding-BepisResoniteWrapper` (>=1.0.2)
 4. Gale で Resonite を一度起動して `<repo>/gale/BepInEx/` の生成を確認
-5. `just check-gale` で必要 DLL が揃っているか検証
 
 > `./gale/` は `.gitignore` 済みで host 側の Gale が管理する。リポジトリにはコミットされない。
 
-### 2. 環境設定
-
-```sh
-cp .env.example .env
-# .env の ResonitePath を Resonite 実行ディレクトリの絶対パスに書き換える
-# (FrooxEngine.dll の HintPath 参照専用; deploy 先ではない)
-```
-
-### 3. Docker image をビルド
+### 2. Docker image をビルド
 
 ```sh
 just container-build
@@ -54,16 +55,17 @@ just container-build
 
 UID/GID は host user と一致した形で焼かれる。host user が変わったら再ビルドが必要。
 
-### 4. コンテナ起動 + 初期化
+### 3. コンテナ起動 + 依存解決
 
 ```sh
 just container-up      # サービス起動 (sleep infinity で常駐)
-just container-init    # /workspace volume に repo を bootstrap + 依存解決
+just container-init    # container 内で dotnet tool restore + uv sync + pre-commit install
 ```
 
-`container-init` は初回のみ必要。再実行する場合は `--force` を付ける。
+`/workspace` は host repo の bind mount なので、`container-init` は **依存解決のみ**
+を冪等に行う (rsync は走らない)。依存追加や lock 更新時に再実行する。
 
-### 5. 開発
+### 4. 開発
 
 ```sh
 just container-shell   # コンテナ内 bash に attach
@@ -76,17 +78,18 @@ just deploy-mod        # gale/BepInEx/plugins/ResoniteIO/ に DLL を配置
 
 deploy された DLL は host user 所有になっている (UID/GID マッピング済み)。
 
-### 6. 後片付け
+### 5. 後片付け
 
 ```sh
 just container-down    # コンテナ停止 (volume は残す)
-just container-clean   # volume も含めて完全削除 (destructive)
+just container-clean   # cache volume + image を完全削除 (destructive、host repo には影響しない)
 ```
 
 ## 主なレシピ
 
 | レシピ            | 役割                                                                   |
 | ----------------- | ---------------------------------------------------------------------- |
+| `just init`       | host 側で初回 setup (docker / .env / Gale プロファイルの確認)          |
 | `just gen-proto`  | proto から Python 生成コードを再生成 (`python/src/resoio/_generated/`) |
 | `just format`     | Python (ruff) と C# (csharpier) の両側をフォーマット                   |
 | `just test`       | Python (pytest+cov) と C# (dotnet test) の両側を実行                   |
