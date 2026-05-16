@@ -98,8 +98,6 @@ mod-pack:
     cd mod && dotnet build ResoniteIO.sln -c Release -t:PackTS -v d
 
 # ローカル開発成果物と Gale プロファイルに配置された plugin を撤去する。
-# 配置先ディレクトリ自体は残す (compose の rw 子 bind が指す inode を維持する
-# ため; ディレクトリごと消すと container 内 bind が stale になる)。
 mod-clean:
     find mod -type d -name 'bin' -prune -exec rm -rf {} +
     find mod -type d -name 'obj' -prune -exec rm -rf {} +
@@ -107,8 +105,8 @@ mod-clean:
     @GALE_ROOT="${GalePath:-./gale}"; \
     PLUGIN_DIR="$GALE_ROOT/BepInEx/plugins/ResoniteIO"; \
     if [ -d "$PLUGIN_DIR" ]; then \
-        find "$PLUGIN_DIR" -mindepth 1 -delete && \
-        echo "Cleared $PLUGIN_DIR"; \
+        rm -rf "$PLUGIN_DIR" && \
+        echo "Removed $PLUGIN_DIR"; \
     fi
 
 # ===== 横断 ==============================================================
@@ -243,14 +241,13 @@ container-down:
     docker compose down
 
 # container 内で deps を解決する冪等レシピ (dotnet tool restore + uv sync +
-# pre-commit install + Claude settings symlink)。/workspace は host repo の bind
-# なので rsync は不要。依存追加 / lock 更新後に再実行する。
+# pre-commit install + Claude settings symlink)。依存追加 / lock 更新後に再実行する。
 container-init:
     docker compose exec dev bash scripts/container-init.sh
 
 container-shell:
     docker compose exec dev bash
 
-# 完全削除 (named volume の作業内容も消える, destructive)。
+# image / network / cache volume を撤去 (destructive、host repo は影響しない)。
 container-clean:
     docker compose down -v --rmi local --remove-orphans

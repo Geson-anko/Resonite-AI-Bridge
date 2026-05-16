@@ -4,10 +4,9 @@
 #   - debian:bookworm-slim ベース。
 #   - .NET 10 SDK / uv / just / protoc を /usr/local 配下に root で固定インストール。
 #   - host UID/GID 一致の `dev` ユーザーで実行 (bind 経由の成果物が host 所有になる)。
-#   - **ソースコードは COPY しない**。/workspace は host repo を直接 bind mount するので、
-#     host 編集が即座に container 側に反映される。bootstrap copy は不要。
-#     deps restore (dotnet tool restore + uv sync + pre-commit install) は
-#     scripts/container-init.sh が冪等に行う。
+#   - ソースコードは image に焼かない。host repo を `/workspace` に bind mount し、
+#     dotnet tool restore / uv sync / pre-commit install は scripts/container-init.sh が
+#     冪等に行う。
 
 FROM debian:bookworm-slim
 
@@ -23,7 +22,7 @@ ENV PATH=/usr/local/dotnet:/usr/local/bin:/home/dev/.local/bin:$PATH
 ENV DOTNET_CLI_TELEMETRY_OPTOUT=1
 ENV DOTNET_NOLOGO=1
 
-# python3 / build-essential は入れない (uv が独自 Python を引く)。
+# uv が独自 Python を引くため python3 / build-essential は不要。
 # libicu72 は .NET SDK の globalization 初期化に必要 (bookworm-slim には含まれない)。
 RUN apt-get update && apt-get install -y --no-install-recommends \
         git \
@@ -32,7 +31,6 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
         tar \
         ca-certificates \
         xz-utils \
-        rsync \
         bash-completion \
         libatomic1 \
         libicu72 \
@@ -69,16 +67,14 @@ RUN set -eux; \
     echo '[ -f /usr/share/bash-completion/bash_completion ] && . /usr/share/bash-completion/bash_completion' \
       >> /etc/bash.bashrc
 
-# /workspace は host repo を bind するため、image 内の空ディレクトリは mount 時に
-# 隠される。それでも先行作成しておくと bind 失敗時に container が `/workspace` 上で
-# 起動できるため fallback として残す。/home/dev/.claude は container-init.sh が
-# settings.container.json への symlink を張る前提でディレクトリだけ用意する。
-# キャッシュ系 (.nuget / .cache/uv) は named volume のマウント先で、dev 所有で
-# 先行作成しておくことで Docker が初回マウント時に属性を継承する。
+# キャッシュ系 (.nuget / .cache/uv) は named volume のマウント先で、Docker が初回
+# マウント時に target dir の所有権/モードを継承するため dev 所有で先行作成しておく。
+# /home/dev/.claude は container-init.sh が settings.container.json への symlink を
+# 張る前提でディレクトリだけ用意する。
 RUN groupadd -g ${USER_GID} dev \
  && useradd -m -u ${USER_UID} -g ${USER_GID} -s /bin/bash dev \
- && mkdir -p /workspace /home/dev/.nuget/packages /home/dev/.cache/uv /home/dev/.claude \
- && chown -R dev:dev /workspace /home/dev \
+ && mkdir -p /home/dev/.nuget/packages /home/dev/.cache/uv /home/dev/.claude \
+ && chown -R dev:dev /home/dev \
  && echo 'dev ALL=(ALL) NOPASSWD: ALL' > /etc/sudoers.d/dev \
  && chmod 0440 /etc/sudoers.d/dev
 

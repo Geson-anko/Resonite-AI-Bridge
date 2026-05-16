@@ -38,7 +38,7 @@ C# 実装は **Core/Mod 二層構成**: コア機能 (gRPC server / Service / pr
 ```text
 resonite-io/
 ├── Dockerfile                 # 開発コンテナ image (debian + .NET 10 + uv + protoc)
-├── docker-compose.yml         # dev サービス定義 (host UID/GID 一致 / ResonitePath bind / Gale profile bind)
+├── docker-compose.yml         # dev サービス定義 (host UID/GID 一致 / repo を /workspace に bind / ResonitePath bind)
 ├── justfile                   # ルートタスクランナー
 ├── buf.yaml                   # proto lint/breaking 設定
 ├── .pre-commit-config.yaml
@@ -63,7 +63,7 @@ resonite-io/
 │   │   ├── session.py         # ← Step 2 で実装に差し替える placeholder
 │   │   └── _generated/        # protoc 出力 (commit する)
 │   └── tests/resoio/
-├── scripts/{gen_proto.sh, decompile.sh, container-init.sh, lib.sh}   # container-init.sh は container 内の deps restore のみ (bind mount のため rsync 無し)
+├── scripts/{gen_proto.sh, decompile.sh, container-init.sh, lib.sh}
 ├── decompiled/                # ILSpy 出力 (gitignore、`just decompile` で再生成)
 ├── gale/                      # Gale (Resonite mod manager) profile 展開先 (gitignore、host で Gale が管理)
 ├── .claude/                   # 規約・memory (本ファイル / resonite_io_plan.md / agents/)
@@ -124,9 +124,9 @@ C# 側のモジュール構造と Python 側のモジュール構造は **モダ
 **`debian:bookworm-slim` ベースの単一 image** に同梱し、host にはインストールしない。
 
 - `docker-compose.yml` は `name: resonite-io-${USER}` で **user 単位の名前空間** に分離 (同一ホストの複数アカウント / 複数 worktree が衝突しない)
-- 作業ディレクトリは **host repo を `/workspace` に直接 rw bind**。host 側で編集したファイルが即座に container 側に反映される。build 成果物 (`bin/`, `obj/`, `python/.venv/` 等) は host 側にも現れるが、すべて `.gitignore` 済み。`/source` ro bind + rsync 方式は廃止 (`dev` user の UID/GID が host と一致しているため所有権問題は発生しない)
+- 作業ディレクトリは **host repo を `/workspace` に直接 rw bind**。host 側の編集が即座に container 側に反映され、container 内の build 成果物 (`bin/`, `obj/`, `python/.venv/` 等) も `.gitignore` 経由で host 側に出る
 - Resonite フォルダは `/resonite` に **read-only bind** のみ (FrooxEngine.dll 等の HintPath 参照専用; mod の deploy 先ではない)
-- Gale プロファイル (`./gale/`) は **`/workspace/gale` 経由で参照** する (専用 bind は廃止)。`docker-compose.yml` の `environment.GalePath: /workspace/gale` が csproj の deploy 先を解決
+- Gale プロファイル (`./gale/`) は `/workspace/gale` 経由で参照する (`environment.GalePath: /workspace/gale` が csproj の deploy 先を解決)
 - コンテナ内 `dev` user の **UID/GID を host user に一致** させて build (`HOST_UID` / `HOST_GID` を build-arg で渡す)。これにより `deploy-mod` で出力された DLL/PDB が host user 所有になり、host 側 git からそのまま見える
 - NuGet / uv のキャッシュは **named volume** にマウントして再ビルドを高速化 (`/home/dev/.nuget` / `/home/dev/.cache/uv`)
 - `csharpier` / `tcli` 等の .NET CLI ツールは **`.config/dotnet-tools.json` の local tool** として固定し、`dotnet tool restore` + `dotnet <tool>` で呼び出す (global tool + PATH 操作は採らない)。`betterproto2_compiler` 等は `uv` 経由
@@ -150,13 +150,13 @@ C# 側のモジュール構造と Python 側のモジュール構造は **モダ
 | `just build`           | C# mod を `dotnet build -c Release`                                                                                                            |
 | `just run`             | `format` → `gen-proto` → `build` → `test` → `type` を直列実行                                                                                  |
 | `just clean`           | `clean-py` と `mod-clean` を実行                                                                                                               |
-| `just mod-clean`       | `mod/{bin,obj,build}` を削除し、`gale/BepInEx/plugins/ResoniteIO/` の中身も撤去 (ディレクトリ自体は deploy 先として残す)                       |
+| `just mod-clean`       | `mod/{bin,obj,build}` と `gale/BepInEx/plugins/ResoniteIO/` を削除                                                                             |
 | `just container-build` | Docker image をビルド (debian + .NET 10 SDK + uv + protoc + dotnet local tools)。`--no-cache` 固定                                             |
 | `just container-up`    | サービスをバックグラウンド起動。`ResonitePath` / `XDG_RUNTIME_DIR` が未設定なら fail (Gale プロファイル確認は `just init` の責務)              |
-| `just container-init`  | container 内で deps 解決 (`dotnet tool restore` + `uv sync` + `pre-commit install` + Claude settings symlink)。bind mount なので rsync は無い  |
+| `just container-init`  | container 内で deps 解決 (`dotnet tool restore` + `uv sync` + `pre-commit install` + Claude settings symlink)                                  |
 | `just container-shell` | コンテナ内 bash に attach (`/workspace` カレント)                                                                                              |
-| `just container-down`  | サービス停止 (volume は保持)                                                                                                                   |
-| `just container-clean` | image / cache volume / network 完全削除 (destructive、host repo には影響しない)                                                                |
+| `just container-down`  | サービス停止 (cache volume は保持)                                                                                                             |
+| `just container-clean` | image / cache volume / network 撤去 (destructive、host repo には影響しない)                                                                    |
 
 サブコマンド分離が必要な場合の補助レシピ:
 

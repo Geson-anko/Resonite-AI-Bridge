@@ -62,8 +62,7 @@ just container-up      # サービス起動 (sleep infinity で常駐)
 just container-init    # container 内で dotnet tool restore + uv sync + pre-commit install
 ```
 
-`/workspace` は host repo の bind mount なので、`container-init` は **依存解決のみ**
-を冪等に行う (rsync は走らない)。依存追加や lock 更新時に再実行する。
+`container-init` は冪等。依存追加や lock 更新後に再実行する。
 
 ### 4. 開発
 

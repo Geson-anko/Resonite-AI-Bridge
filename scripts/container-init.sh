@@ -1,8 +1,7 @@
 #!/usr/bin/env bash
 # scripts/container-init.sh
 #
-# /workspace は host repo の bind mount なので bootstrap copy は不要。
-# 本スクリプトは container 内 dev ユーザーで実行し、依存解決のみ行う冪等レシピ。
+# container 内 dev ユーザーで実行する冪等な deps restore レシピ。
 #
 # 流れ:
 #   1. dotnet tool restore で .config/dotnet-tools.json を解決
@@ -83,7 +82,7 @@ link_claude_settings() {
 }
 
 main() {
-  log "Resolving dependencies in $WORKSPACE_DIR (bind-mounted host repo)"
+  log "Resolving dependencies in $WORKSPACE_DIR"
   restore_dotnet_tools
   sync_python
   install_pre_commit_hooks

@@ -4,12 +4,10 @@
 #   名前空間化し、同一ホストで複数ユーザーが衝突せず共存できるようにする。
 # - host repo を `/workspace` に rw bind する。dev ユーザーの UID/GID を host と
 #   一致させているため、container 内で生成した成果物は host から所有権そのまま見える。
-#   build 中間生成物 (bin/obj/.venv 等) は .gitignore 済み。
 # - host 側 ${ResonitePath} (Resonite 実行ディレクトリ) を ro bind するのは
 #   FrooxEngine.dll 等の HintPath 参照用 (csproj が `/resonite` を見に行く)。
 #   コンテナ内では `environment: ResonitePath: /resonite` で上書きする。
-# - mod の deploy 先は host repo 直下の Gale プロファイル `./gale/` で、これは
-#   `/workspace/gale` 経由でそのまま container から rw に見える (専用 bind 不要)。
+# - mod の deploy 先は `/workspace/gale` (= host repo 直下の Gale プロファイル)。
 #   コンテナ内では `environment: GalePath: /workspace/gale` で csproj が deploy 先を解決。
 # - ${HOST_UID} / ${HOST_GID} は justfile の container-* レシピが
 #   `id -u` / `id -g` から動的に注入する。.env には書かない。
