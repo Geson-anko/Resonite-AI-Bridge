@@ -52,6 +52,18 @@
     <CopyToPlugins>true</CopyToPlugins>
     <ThunderstorePackable>true</ThunderstorePackable>
 
+    <!--
+      Core が引っ張る Grpc.AspNetCore.Server / Microsoft.AspNetCore.* /
+      Microsoft.Extensions.* / System.IO.Pipelines 等の transitive ランタイム
+      DLL を bin/ にコピーする。BepInEx は通常の AssemblyLoadContext で
+      plugin フォルダから DLL を解決するため、deps.json 経由の nuget cache
+      lookup は効かない (= 隣接 DLL が必須)。Resonite (Unity) は AspNetCore を
+      持っていないので衝突は起きないはずだが、.NET ランタイム標準 DLL との
+      version skew 可能性は残る。実機で plugin がロードできるかは Phase 4
+      (E2E 検証) の宿題として残す。
+    -->
+    <CopyLocalLockFileAssemblies>true</CopyLocalLockFileAssemblies>
+
     <!-- Resonite 実行ディレクトリ解決 (FrooxEngine.dll 等の HintPath 参照専用):
          env var → Steam Win → Steam Linux -->
     <GamePath Condition="'$(ResonitePath)' != ''">$(ResonitePath)/</GamePath>
@@ -113,7 +125,15 @@
   <!-- $(GalePath)BepInEx/plugins/$(AssemblyName)/ に成果物を配置。
        Core/Mod 二層構成のため、mod 本体 (ResoniteIO.dll/pdb) に加えて
        ProjectReference 先の ResoniteIO.Core.dll/pdb もコピーする
-       (Plugin ロード時の type 解決に必要)。 -->
+       (Plugin ロード時の type 解決に必要)。
+       さらに Core が transitive に持ち込む gRPC/Protobuf ランタイム DLL
+       (Grpc.AspNetCore.Server / Grpc.Core.Api / Grpc.Net.Common /
+       Google.Protobuf) も同梱する。BepInExResoniteShim / BepisResoniteWrapper
+       は Gale プロファイルが別途 install する canonical 版を使うため
+       明示的に **除外** する。
+       Microsoft.AspNetCore.App は framework reference のため CopyLocal の
+       対象外で、ここからも copy できない (Resonite 側に runtime として存在
+       する想定だが Unity 由来のため要 Phase 4 検証)。 -->
   <Target Name="PostBuild" AfterTargets="PostBuildEvent">
     <ItemGroup>
       <PluginFiles Include="$(TargetPath)" />
@@ -128,6 +148,22 @@
       <PluginFiles
         Include="$(TargetDir)ResoniteIO.Core.pdb"
         Condition="Exists('$(TargetDir)ResoniteIO.Core.pdb')"
+      />
+      <PluginFiles
+        Include="$(TargetDir)Google.Protobuf.dll"
+        Condition="Exists('$(TargetDir)Google.Protobuf.dll')"
+      />
+      <PluginFiles
+        Include="$(TargetDir)Grpc.AspNetCore.Server.dll"
+        Condition="Exists('$(TargetDir)Grpc.AspNetCore.Server.dll')"
+      />
+      <PluginFiles
+        Include="$(TargetDir)Grpc.Core.Api.dll"
+        Condition="Exists('$(TargetDir)Grpc.Core.Api.dll')"
+      />
+      <PluginFiles
+        Include="$(TargetDir)Grpc.Net.Common.dll"
+        Condition="Exists('$(TargetDir)Grpc.Net.Common.dll')"
       />
     </ItemGroup>
 
