@@ -41,7 +41,12 @@ class AmbiguousSocketError(RuntimeError):
 
 
 def _resolve_socket_path() -> str:
-    """Resolve the UDS path to connect to, honoring env-var overrides."""
+    """Resolve the UDS path to connect to, honoring env-var overrides.
+
+    Empty strings are treated as "unset" so a stray ``=`` in shell config
+    falls through to the next discovery step rather than yielding a bogus
+    empty path.
+    """
     explicit = os.environ.get("RESONITE_IO_SOCKET")
     if explicit:
         return explicit
@@ -111,10 +116,13 @@ class SessionClient:
         tb: TracebackType | None,
     ) -> None:
         channel = self._channel
-        if channel is not None:
-            channel.close()
+        # Reset state first so a raising `close()` still leaves the client
+        # in a clean "not connected" state for any retry / re-enter logic.
         self._channel = None
         self._stub = None
+        self._resolved_path = None
+        if channel is not None:
+            channel.close()
 
     async def ping(self, message: str) -> PingResponse:
         """Send a ``Ping`` RPC and return the server's
