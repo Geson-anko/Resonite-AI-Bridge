@@ -9,7 +9,6 @@ from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
 import betterproto2
-import grpc
 import grpclib
 from betterproto2 import grpclib as betterproto2_grpclib
 
@@ -17,6 +16,8 @@ from ...message_pool import default_message_pool
 
 if TYPE_CHECKING:
     import grpclib.server
+    from betterproto2.grpclib.grpclib_client import MetadataLike
+    from grpclib.metadata import Deadline
 
 _COMPILER_VERSION = "0.9.0"
 betterproto2.check_compiler_version(_COMPILER_VERSION)
@@ -50,22 +51,29 @@ class PingResponse(betterproto2.Message):
 default_message_pool.register_message("resonite_io.v1", "PingResponse", PingResponse)
 
 
-class SessionStub:
+class SessionStub(betterproto2_grpclib.ServiceStub):
     """
     Session は制御プレーンの中心サービス。モダリティ固有の RPC は別 service に
     分割するため、本 service は接続確認と将来的な capability negotiation のみを
     担当する。
     """
 
-    def __init__(self, channel: grpc.Channel):
-        self._channel = channel
-
-    def ping(self, message: "PingRequest") -> "PingResponse":
-        return self._channel.unary_unary(
+    async def ping(
+        self,
+        message: "PingRequest",
+        *,
+        timeout: "float | None" = None,
+        deadline: "Deadline | None" = None,
+        metadata: "MetadataLike | None" = None,
+    ) -> "PingResponse":
+        return await self._unary_unary(
             "/resonite_io.v1.Session/Ping",
-            PingRequest.SerializeToString,
-            PingResponse.FromString,
-        )(message)
+            message,
+            PingResponse,
+            timeout=timeout,
+            deadline=deadline,
+            metadata=metadata,
+        )
 
 
 class SessionBase(betterproto2_grpclib.ServiceBase):
