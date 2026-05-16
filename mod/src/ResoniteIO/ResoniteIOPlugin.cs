@@ -1,7 +1,5 @@
 using System;
 using System.IO;
-using System.Reflection;
-using System.Runtime.Loader;
 using System.Threading;
 using BepInEx;
 using BepInEx.Logging;
@@ -11,6 +9,7 @@ using BepisResoniteWrapper;
 using FrooxEngine;
 using ResoniteIO.Bridge;
 using ResoniteIO.Core.Session;
+using ResoniteIO.Loading;
 using ResoniteIO.Logging;
 
 namespace ResoniteIO;
@@ -42,6 +41,8 @@ public sealed class ResoniteIOPlugin : BasePlugin
     /// </summary>
     internal static new ManualLogSource Log = null!;
 
+    private PluginAssemblyResolver? _assemblyResolver;
+    private BepInExLogSink? _logSink;
     private CancellationTokenSource? _hostCts;
     private SessionHost? _sessionHost;
     private FrooxEngineSessionBridge? _sessionBridge;
@@ -50,61 +51,36 @@ public sealed class ResoniteIOPlugin : BasePlugin
     /// プラグインロード時に BepInEx ランタイムから呼び出される。
     /// </summary>
     /// <remarks>
+    /// <para>
     /// この時点では FrooxEngine の初期化が完了していない可能性があるため、
     /// Engine.Current 配下に触れる処理は <see cref="OnEngineReady"/> 側に書く。
+    /// </para>
+    /// <para>
+    /// 重要: <see cref="PluginAssemblyResolver"/> attach **以前** に
+    /// <c>ResoniteIO.Core</c> 配下の型 (例: <see cref="BepInExLogSink"/>) を参照しない。
+    /// 参照すると <c>ResoniteIO.Core.dll</c> が早期ロードされ、resolver event が
+    /// 発火する前に Resonite 同梱の旧 <c>Google.Protobuf</c> が解決され、
+    /// その後 <see cref="SessionHost"/> 起動時に
+    /// <c>TypeLoadException: Could not load type 'Google.Protobuf.IBufferMessage'</c>
+    /// となる。<see cref="BepInExLogSink"/> の生成は <see cref="OnEngineReady"/> に遅延する。
+    /// </para>
     /// </remarks>
     public override void Load()
     {
         Log = base.Log;
-        AssemblyLoadContext.Default.Resolving += ResolveFromPluginDirectory;
+
+        // BepInEx は plugin folder を Default ALC の probe path に登録しないため、
+        // 同梱した ASP.NET Core / gRPC 隣接 DLL を fallback 解決するリゾルバを attach。
+        // ManualLogSource を直接渡し、Core 側型 (BepInExLogSink/ILogSink) を経由しない。
+        var pluginDirectory =
+            Path.GetDirectoryName(typeof(ResoniteIOPlugin).Assembly.Location) ?? string.Empty;
+        if (!string.IsNullOrEmpty(pluginDirectory))
+        {
+            _assemblyResolver = new PluginAssemblyResolver(pluginDirectory, Log);
+        }
+
         ResoniteHooks.OnEngineReady += OnEngineReady;
         Log.LogInfo($"{PluginMetadata.NAME} {PluginMetadata.VERSION} loaded");
-    }
-
-    /// <summary>
-    /// 同梱した ASP.NET Core / gRPC ランタイム DLL を plugin folder から解決する
-    /// <see cref="AssemblyLoadContext.Resolving"/> ハンドラ。
-    /// </summary>
-    /// <remarks>
-    /// BepInEx は plugin folder を Default ALC の probe path に登録しないため、
-    /// <see cref="SessionHost"/> 経由で遅延ロードされる
-    /// <c>Microsoft.AspNetCore.*</c> / <c>Grpc.AspNetCore.*</c> 等の隣接 DLL を
-    /// runtime が見つけられず <see cref="FileNotFoundException"/> になる。
-    /// 自前で plugin dir を probe してフォールバック解決する。
-    /// </remarks>
-    private static Assembly? ResolveFromPluginDirectory(
-        AssemblyLoadContext context,
-        AssemblyName assemblyName
-    )
-    {
-        if (assemblyName.Name is null)
-        {
-            return null;
-        }
-
-        var pluginDirectory = Path.GetDirectoryName(typeof(ResoniteIOPlugin).Assembly.Location);
-        if (string.IsNullOrEmpty(pluginDirectory))
-        {
-            return null;
-        }
-
-        var candidate = Path.Combine(pluginDirectory, $"{assemblyName.Name}.dll");
-        if (!File.Exists(candidate))
-        {
-            return null;
-        }
-
-        try
-        {
-            return context.LoadFromAssemblyPath(candidate);
-        }
-        catch (Exception ex)
-        {
-            Log.LogWarning(
-                $"Failed to resolve '{assemblyName.Name}' from plugin folder: {ex.Message}"
-            );
-            return null;
-        }
     }
 
     /// <summary>
@@ -130,17 +106,20 @@ public sealed class ResoniteIOPlugin : BasePlugin
         {
             _hostCts = new CancellationTokenSource();
             AppDomain.CurrentDomain.ProcessExit += OnProcessExit;
-            var log = new BepInExLogSink(Log);
+            // Core 側型を参照する最初のポイント。PluginAssemblyResolver は Load() で
+            // attach 済みのため、ResoniteIO.Core.dll および隣接 Google.Protobuf.dll は
+            // plugin folder 同梱版が解決される。
+            _logSink = new BepInExLogSink(Log);
             // FrooxEngine 状態 (FocusedWorld / LocalUser) を Core 側へ露出する。
             // WorldFocused event をここで購読し、focus 切替時にログ + snapshot を更新。
-            _sessionBridge = new FrooxEngineSessionBridge(Engine.Current, log);
+            _sessionBridge = new FrooxEngineSessionBridge(Engine.Current, _logSink);
             // SessionHost の default (`$HOME/.resonite-io/`) をそのまま使う。
             // Steam pressure-vessel は host の `/home/$USER` を sandbox に
             // pass-through するため、ホスト Python / container Python と
             // 同じ inode に到達できる (container 側は username が異なるため
             // `${HOME}/.resonite-io` → `/home/dev/.resonite-io` の bind を
             // docker-compose.yml で設定済み)。
-            _sessionHost = SessionHost.Start(log, _hostCts.Token, _sessionBridge);
+            _sessionHost = SessionHost.Start(_logSink, _hostCts.Token, _sessionBridge);
             Log.LogInfo($"Session gRPC host bound at: {_sessionHost.SocketPath}");
         }
         catch (Exception ex)
@@ -176,6 +155,15 @@ public sealed class ResoniteIOPlugin : BasePlugin
         try
         {
             _sessionHost?.DisposeAsync().AsTask().GetAwaiter().GetResult();
+        }
+        catch
+        {
+            // best-effort
+        }
+
+        try
+        {
+            _assemblyResolver?.Dispose();
         }
         catch
         {

@@ -1,6 +1,6 @@
 using ResoniteIO.Core.Bridge;
-using ResoniteIO.Core.Logging;
 using ResoniteIO.Core.Session;
+using ResoniteIO.Core.Tests.Helpers;
 using Xunit;
 
 namespace ResoniteIO.Core.Tests;
@@ -59,16 +59,5 @@ public sealed class SessionBridgeWiringTests
     {
         public string? FocusedWorldName { get; } = focusedWorldName;
         public string? LocalUserName { get; } = localUserName;
-    }
-
-    private sealed class NullLogSink : ILogSink
-    {
-        public void LogDebug(string message) { }
-
-        public void LogInfo(string message) { }
-
-        public void LogWarning(string message) { }
-
-        public void LogError(string message) { }
     }
 }

@@ -1,7 +1,7 @@
 using System.Net.Sockets;
 using Grpc.Net.Client;
-using ResoniteIO.Core.Logging;
 using ResoniteIO.Core.Session;
+using ResoniteIO.Core.Tests.Helpers;
 using ResoniteIO.V1;
 using Xunit;
 
@@ -113,16 +113,5 @@ public sealed class SessionRoundTripTests
             await Task.Delay(50);
         }
         Assert.Fail(failureMessage);
-    }
-
-    private sealed class NullLogSink : ILogSink
-    {
-        public void LogDebug(string message) { }
-
-        public void LogInfo(string message) { }
-
-        public void LogWarning(string message) { }
-
-        public void LogError(string message) { }
     }
 }
