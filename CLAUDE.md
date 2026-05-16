@@ -38,7 +38,7 @@ C# 実装は **Core/Mod 二層構成**: コア機能 (gRPC server / Service / pr
 ```text
 resonite-io/
 ├── Dockerfile                 # 開発コンテナ image (debian + .NET 10 + uv + protoc)
-├── docker-compose.yml         # dev サービス定義 (host UID/GID 一致 / ResonitePath bind / Gale profile bind)
+├── docker-compose.yml         # dev サービス定義 (host UID/GID 一致 / repo を /workspace に bind / ResonitePath bind)
 ├── justfile                   # ルートタスクランナー
 ├── buf.yaml                   # proto lint/breaking 設定
 ├── .pre-commit-config.yaml
@@ -124,11 +124,11 @@ C# 側のモジュール構造と Python 側のモジュール構造は **モダ
 **`debian:bookworm-slim` ベースの単一 image** に同梱し、host にはインストールしない。
 
 - `docker-compose.yml` は `name: resonite-io-${USER}` で **user 単位の名前空間** に分離 (同一ホストの複数アカウント / 複数 worktree が衝突しない)
-- 作業ディレクトリは **named volume を `/workspace` にマウント**。host repo は `/source` に **read-only bind** し、`just container-init` で `/workspace` へ rsync する **bootstrap 方式** (host 側 IDE と container 側 build tree を分離してパフォーマンス劣化と誤書きを避ける)
+- 作業ディレクトリは **host repo を `/workspace` に直接 rw bind**。host 側の編集が即座に container 側に反映され、container 内の build 成果物 (`bin/`, `obj/`, `python/.venv/` 等) も `.gitignore` 経由で host 側に出る
 - Resonite フォルダは `/resonite` に **read-only bind** のみ (FrooxEngine.dll 等の HintPath 参照専用; mod の deploy 先ではない)
-- Gale プロファイル (`./gale/`) は `/gale` に **read-only bind** + `/gale/BepInEx/plugins/ResoniteIO` だけ **rw bind** の **重ね bind** (deploy 先以外の profile ファイルを誤って書き換えない安全策)
+- Gale プロファイル (`./gale/`) は `/workspace/gale` 経由で参照する (`environment.GalePath: /workspace/gale` が csproj の deploy 先を解決)
 - コンテナ内 `dev` user の **UID/GID を host user に一致** させて build (`HOST_UID` / `HOST_GID` を build-arg で渡す)。これにより `deploy-mod` で出力された DLL/PDB が host user 所有になり、host 側 git からそのまま見える
-- NuGet / uv のキャッシュは **named volume** にマウントして再ビルドを高速化
+- NuGet / uv のキャッシュは **named volume** にマウントして再ビルドを高速化 (`/home/dev/.nuget` / `/home/dev/.cache/uv`)
 - `csharpier` / `tcli` 等の .NET CLI ツールは **`.config/dotnet-tools.json` の local tool** として固定し、`dotnet tool restore` + `dotnet <tool>` で呼び出す (global tool + PATH 操作は採らない)。`betterproto2_compiler` 等は `uv` 経由
 
 ## コマンド
@@ -141,6 +141,7 @@ C# 側のモジュール構造と Python 側のモジュール構造は **モダ
 | `just decompile`       | `scripts/decompile.sh` で Resonite first-party DLL を ILSpy (`ilspycmd`) で project 形式で `decompiled/` に展開。`.env` の `ResonitePath` 必須 |
 | `just log`             | host 側で `gale/BepInEx/LogOutput.log` (Gale 経由起動時) を `tail -F` で追従 (Resonite 再起動を跨いで再追従)。print-debug の主経路             |
 | `just deploy-mod`      | `just mod-build` を呼び、csproj の PostBuild Target 経由で `gale/BepInEx/plugins/ResoniteIO/` に DLL+PDB を配置 (DLL 未配置なら exit 1)        |
+| `just init`            | host 側で初回 setup。docker / docker compose v2 検出 → `.env` セットアップ → `ResonitePath` 検証 → Gale プロファイル設置確認を順に実施 (冪等)  |
 | `just check-gale`      | Gale プロファイル (`./gale/`) に必須 plugin (BepisLoader / BepInExResoniteShim / BepisResoniteWrapper) が揃っているか検証 (不足あれば exit 1)  |
 | `just mod-pack`        | `dotnet build -c Release -t:PackTS` で Thunderstore 配布用 zip を `mod/build/` に生成 (`tcli` ラップ)                                          |
 | `just format`          | C# (`csharpier`) と Python (`ruff format` + `ruff check --fix`) を両方走らせる                                                                 |
@@ -149,13 +150,13 @@ C# 側のモジュール構造と Python 側のモジュール構造は **モダ
 | `just build`           | C# mod を `dotnet build -c Release`                                                                                                            |
 | `just run`             | `format` → `gen-proto` → `build` → `test` → `type` を直列実行                                                                                  |
 | `just clean`           | `clean-py` と `mod-clean` を実行                                                                                                               |
-| `just mod-clean`       | `mod/{bin,obj,build}` を削除し、`gale/BepInEx/plugins/ResoniteIO/` の中身も撤去 (ディレクトリ自体は bind 維持のため残す)                       |
+| `just mod-clean`       | `mod/{bin,obj,build}` と `gale/BepInEx/plugins/ResoniteIO/` を削除                                                                             |
 | `just container-build` | Docker image をビルド (debian + .NET 10 SDK + uv + protoc + dotnet local tools)。`--no-cache` 固定                                             |
-| `just container-up`    | サービスをバックグラウンド起動。`ResonitePath` 未設定 / `gale/BepisLoader.dll` 不在なら fail (Gale profile 事前作成必須)                       |
-| `just container-init`  | `/workspace` volume へ host repo を bootstrap copy + 依存解決 (`dotnet tool restore` + `uv sync`)                                              |
+| `just container-up`    | サービスをバックグラウンド起動。`ResonitePath` / `XDG_RUNTIME_DIR` が未設定なら fail (Gale プロファイル確認は `just init` の責務)              |
+| `just container-init`  | container 内で deps 解決 (`dotnet tool restore` + `uv sync` + `pre-commit install` + Claude settings symlink)                                  |
 | `just container-shell` | コンテナ内 bash に attach (`/workspace` カレント)                                                                                              |
-| `just container-down`  | サービス停止 (volume は保持)                                                                                                                   |
-| `just container-clean` | image / volume / network 完全削除 (destructive)                                                                                                |
+| `just container-down`  | サービス停止 (cache volume は保持)                                                                                                             |
+| `just container-clean` | image / cache volume / network 撤去 (destructive、host repo には影響しない)                                                                    |
 
 サブコマンド分離が必要な場合の補助レシピ:
 
@@ -188,16 +189,16 @@ C# 側のモジュール構造と Python 側のモジュール構造は **モダ
 
 #### mod loader = Gale プロファイル方式
 
-**ホスト Resonite には BepisLoader を直接インストールしない** (Vanilla 維持)。代わりに [Gale](https://github.com/Kesomannen/gale) (v1.5.4+) のカスタムプロファイル機能で repo root の `./gale/` を mod sandbox にする:
+**ホスト Resonite には BepisLoader を直接インストールしない** (Vanilla 維持)。代わりに [Gale](https://github.com/Kesomannen/gale) (v1.5.4+) のカスタムプロファイル機能で repo root の `./gale/` を mod sandbox にする。`just init` がこのセットアップを案内するが、手動で進める場合の手順は以下:
 
-1. Gale で profile を新規作成し、パスを `<repo>/gale` に指定
+1. Gale で profile を新規作成し、パスを `<repo>/gale` に指定 (**指定先は EMPTY である必要があり、`./gale/` を事前に作らない**)
 2. profile に以下を install:
    - `ResoniteModding-BepisLoader` (>=1.5.1)
    - `ResoniteModding-BepInExResoniteShim` (>=0.9.3)
    - `ResoniteModding-BepisResoniteWrapper` (>=1.0.2)
 3. Gale で Resonite を起動すると `LinuxBootstrap.sh` がプロファイル版に差し替わり、BepInEx が有効化される
-4. `just check-gale` で必須 DLL の在中を検証
-5. `just deploy-mod` で `gale/BepInEx/plugins/ResoniteIO/` に DLL+PDB が配置される
+4. `just check-gale` (または `just init`) で必須 DLL の在中を検証
+5. `just deploy-mod` で `gale/BepInEx/plugins/ResoniteIO/` に DLL+PDB が配置される (deploy 先 dir は csproj の `<Copy>` が自動 mkdir する)
 
 ホスト Resonite を Vanilla で起動 (Gale を介さず Steam から直接起動) した場合は mod は読み込まれない。注意点: Gale 経由起動後にホスト Resonite ディレクトリへ `hookfxr.ini` (`enable=true`) 等が残る場合がある。Vanilla 復帰時は確認すること。
 

@@ -120,8 +120,9 @@ ______________________________________________________________________
 .NET SDK / uv / protoc / pre-commit はすべて `debian:bookworm-slim` ベースの単一 image に同梱。
 
 - [x] `Dockerfile` (.NET 10 SDK / uv / just / protoc + shellcheck/shfmt)
-- [x] `docker-compose.yml` (`name: resonite-io-${USER}` で user 単位の名前空間、`/source` ro bind + `/workspace` named volume、`${ResonitePath}` の重ね bind)
-- [x] `scripts/container-init.sh` (`/workspace` への rsync bootstrap + `dotnet tool restore` + `uv sync`)
+- [x] `docker-compose.yml` (`name: resonite-io-${USER}` で user 単位の名前空間、host repo を `/workspace` に rw bind、`${ResonitePath}` を `/resonite` に ro bind、Gale プロファイルは `/workspace/gale` 経由で参照)
+- [x] `scripts/container-init.sh` (container 内 deps restore: `dotnet tool restore` + `uv sync` + `pre-commit install` + Claude settings symlink)
+- [x] `just init` (host 側 one-time setup: docker / `.env` / Gale プロファイル確認)
 - [x] dotnet local tools (`.config/dotnet-tools.json`): `csharpier`, `tcli` (Thunderstore packaging), `ilspycmd` (decompile)
 - [x] `pre-commit` (ruff / pyupgrade / docformatter / mdformat / codespell / uv-lock / pygrep / shellcheck / shfmt)
 - [x] VSCode 推奨拡張一覧 (`.vscode/extensions.json`): C# Dev Kit / Pylance / Ruff / csharpier / buf / docker など
@@ -140,7 +141,7 @@ ______________________________________________________________________
 ```text
 resonite-io/
 ├── Dockerfile                     # 開発コンテナ image (debian + .NET 10 + uv + protoc)
-├── docker-compose.yml             # dev サービス定義 (UID/GID 一致 / ResonitePath / Gale / XDG_RUNTIME_DIR + UDS bind)
+├── docker-compose.yml             # dev サービス定義 (UID/GID 一致 / repo を /workspace に bind / ResonitePath / XDG_RUNTIME_DIR + UDS bind)
 ├── justfile                       # ルートタスクランナー (build / test / container-*)
 ├── buf.yaml                       # proto lint/breaking (modules: proto/)
 ├── .pre-commit-config.yaml
@@ -199,7 +200,7 @@ resonite-io/
 ├── scripts/
 │   ├── gen_proto.sh               # .proto → Python コード生成 (C# 側は csproj が build-time に生成)
 │   ├── decompile.sh               # ilspycmd で Resonite first-party DLL を decompiled/ に展開
-│   ├── container-init.sh          # /workspace への bootstrap + 依存解決
+│   ├── container-init.sh          # container 内 deps restore
 │   └── lib.sh                     # 共通シェルユーティリティ
 │
 ├── decompiled/                    # ILSpy 出力 (gitignore、`just decompile` で再生成)
@@ -210,15 +211,16 @@ resonite-io/
 
 ### D. ビルド・デプロイサイクル
 
-| 経路                          | 役割                                                                              |
-| ----------------------------- | --------------------------------------------------------------------------------- |
-| `just container-build`        | 開発 image をビルド (debian + .NET 10 SDK + uv + protoc + dotnet local tools)     |
-| `just container-up` / `-init` | サービス起動 + `/workspace` への bootstrap                                        |
-| `just gen-proto`              | Python 側コード生成 (C# は csproj `<Protobuf>` で build-time 生成)                |
-| `just deploy-mod`             | `dotnet build` → csproj の PostBuild Target で `$(ResonitePath)/BepInEx/plugins/` |
-| `just decompile`              | ILSpy で Resonite アセンブリを project 形式で `decompiled/` に展開                |
-| `just log`                    | `$(ResonitePath)/BepInEx/LogOutput.log` を host で `tail -F` (debug 主経路)       |
-| `just mod-pack`               | `dotnet build -t:PackTS` で Thunderstore zip を `mod/build/` に生成               |
+| 経路                          | 役割                                                                          |
+| ----------------------------- | ----------------------------------------------------------------------------- |
+| `just init`                   | host 側 one-time setup (docker / `.env` / Gale プロファイル確認、冪等)        |
+| `just container-build`        | 開発 image をビルド (debian + .NET 10 SDK + uv + protoc + dotnet local tools) |
+| `just container-up` / `-init` | サービス起動 + container 内 deps 解決                                         |
+| `just gen-proto`              | Python 側コード生成 (C# は csproj `<Protobuf>` で build-time 生成)            |
+| `just deploy-mod`             | `dotnet build` → csproj の PostBuild Target で `$(GalePath)/BepInEx/plugins/` |
+| `just decompile`              | ILSpy で Resonite アセンブリを project 形式で `decompiled/` に展開            |
+| `just log`                    | `$(GalePath)/BepInEx/LogOutput.log` を host で `tail -F` (debug 主経路)       |
+| `just mod-pack`               | `dotnet build -t:PackTS` で Thunderstore zip を `mod/build/` に生成           |
 
 Python 側は `uv sync` で editable install 含めて完結。
 
