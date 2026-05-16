@@ -1,0 +1,50 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <!--
+    ResoniteIO.Core: Resonite (BepInEx / FrooxEngine / Renderite) に一切依存しない
+    ピュアライブラリ。gRPC server (Kestrel + UDS)、Service 実装、proto handler、
+    モダリティのドメインロジックを置く。
+
+    Mod 側 (`ResoniteIO`) は本プロジェクトを ProjectReference し、engine bridging
+    のみを担う薄いアダプタとして実装する。依存方向は Core ← Mod で逆参照禁止。
+
+    proto は <Protobuf GrpcServices="Server"> として build-time に生成し obj/ に
+    出るため commit しない。Mod 側 csproj は Core を参照するだけで proto を直接
+    持たない (Step 2 Phase 2 で Mod 側から移設予定; 現状は両方に <Protobuf> が
+    あるが生成先が obj/ で衝突しないため過渡的に共存可能)。
+
+    依存パッケージ: Grpc.AspNetCore.Server が必要なランタイム依存
+    (Microsoft.AspNetCore.* / Microsoft.Extensions.* / System.IO.Pipelines) を
+    transitive に持ち込む。Resonite と衝突しうるバージョン skew を避けるため
+    本 csproj では Grpc.AspNetCore.Server / Google.Protobuf / Grpc.Tools のみを
+    明示参照し、AspNetCore / Extensions ファミリーは明示参照しない。
+  -->
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <RootNamespace>ResoniteIO.Core</RootNamespace>
+    <AssemblyName>ResoniteIO.Core</AssemblyName>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Deterministic>true</Deterministic>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Grpc.AspNetCore.Server" Version="2.71.0" />
+    <PackageReference Include="Google.Protobuf" Version="3.30.0" />
+    <PackageReference Include="Grpc.Tools" Version="2.71.0">
+      <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
+      <PrivateAssets>all</PrivateAssets>
+    </PackageReference>
+  </ItemGroup>
+
+  <ItemGroup>
+    <Protobuf
+      Include="..\..\..\proto\resonite_io\v1\*.proto"
+      ProtoRoot="..\..\..\proto"
+      GrpcServices="Server"
+    />
+  </ItemGroup>
+
+  <ItemGroup>
+    <InternalsVisibleTo Include="ResoniteIO.Core.Tests" />
+  </ItemGroup>
+</Project>
