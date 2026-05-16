@@ -35,7 +35,7 @@ from typing import Any
 
 LOG = logging.getLogger("host_agent")
 
-DEFAULT_SOCKET_REL = "resonite-io-debug/host-agent.sock"
+DEFAULT_SOCKET_REL = ".resonite-io-debug/host-agent.sock"
 
 ACCEPT_TIMEOUT_SEC = 1.0
 CLIENT_TIMEOUT_SEC = 5.0
@@ -57,12 +57,12 @@ class StartupError(RuntimeError):
 
 
 def _default_socket_path() -> Path:
-    rt = os.environ.get("XDG_RUNTIME_DIR", "")
-    if not rt:
+    home = os.environ.get("HOME", "")
+    if not home:
         raise StartupError(
-            "XDG_RUNTIME_DIR が未設定です。systemd-logind セッション内で実行してください。"
+            "HOME が未設定です。通常の login session で実行してください。"
         )
-    return Path(rt) / DEFAULT_SOCKET_REL
+    return Path(home) / DEFAULT_SOCKET_REL
 
 
 def _check_display() -> None:
@@ -192,7 +192,12 @@ def _error(
     *,
     data: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
-    resp: dict[str, Any] = {"ok": False, "action": action, "error": error, "detail": detail}
+    resp: dict[str, Any] = {
+        "ok": False,
+        "action": action,
+        "error": error,
+        "detail": detail,
+    }
     if data is not None:
         resp["data"] = data
     return resp
@@ -200,7 +205,9 @@ def _error(
 
 def cmd_start(profile: str | None, gale_bin: str) -> dict[str, Any]:
     if not profile:
-        return _error("start", "missing_profile", "profile is required for the start action")
+        return _error(
+            "start", "missing_profile", "profile is required for the start action"
+        )
     if not _is_safe_profile(profile):
         return _error(
             "start",
@@ -232,7 +239,8 @@ def cmd_start(profile: str | None, gale_bin: str) -> dict[str, Any]:
 
 
 def cmd_stop() -> dict[str, Any]:
-    """``Resonite.exe`` と ``Renderite.Renderer.exe`` を SIGTERM→3s→SIGKILL する。"""
+    """``Resonite.exe`` と ``Renderite.Renderer.exe`` を SIGTERM→3s→SIGKILL
+    する。"""
     patterns = [RESONITE_PATTERN, RENDERITE_PATTERN]
     initial: list[dict[str, Any]] = []
     for pattern in patterns:
@@ -318,7 +326,7 @@ def _serve_one(conn: socket.socket, gale_bin: str) -> None:
         else:
             response = handle_request(line, gale_bin)
         conn.sendall((json.dumps(response) + "\n").encode("utf-8"))
-    except socket.timeout:
+    except TimeoutError:
         LOG.warning("client read/write timed out")
     except Exception:
         LOG.exception("handler error")
@@ -347,7 +355,7 @@ def _accept_loop(server: socket.socket, gale_bin: str, shutdown: _Shutdown) -> N
     while not shutdown.flag:
         try:
             conn, _addr = server.accept()
-        except socket.timeout:
+        except TimeoutError:
             continue
         except OSError as e:
             if shutdown.flag:
@@ -359,12 +367,14 @@ def _accept_loop(server: socket.socket, gale_bin: str, shutdown: _Shutdown) -> N
 
 
 def main() -> int:
-    parser = argparse.ArgumentParser(description="Host-side debug bridge daemon for Resonite IO.")
+    parser = argparse.ArgumentParser(
+        description="Host-side debug bridge daemon for Resonite IO."
+    )
     parser.add_argument(
         "--socket",
         type=Path,
         default=None,
-        help="override UDS path (default: $XDG_RUNTIME_DIR/resonite-io-debug/host-agent.sock)",
+        help="override UDS path (default: $HOME/.resonite-io-debug/host-agent.sock)",
     )
     parser.add_argument(
         "--log-level",
@@ -378,7 +388,9 @@ def main() -> int:
     )
 
     try:
-        sock_path: Path = args.socket if args.socket is not None else _default_socket_path()
+        sock_path: Path = (
+            args.socket if args.socket is not None else _default_socket_path()
+        )
         _check_display()
         gale_bin = _resolve_gale_bin()
         _ensure_socket_dir(sock_path)

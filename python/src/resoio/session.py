@@ -3,8 +3,9 @@
 The :class:`SessionClient` opens a :mod:`grpclib` channel over a Unix Domain
 Socket and exposes typed wrappers around the RPCs defined in
 ``proto/resonite_io/v1/session.proto`` (currently only ``Ping``). Socket path
-resolution mirrors the discovery contract documented in the project plan
-(``RESONITE_IO_SOCKET`` / ``RESONITE_IO_SOCKET_DIR`` / ``$XDG_RUNTIME_DIR``).
+resolution honours ``RESONITE_IO_SOCKET`` (full path) → ``RESONITE_IO_SOCKET_DIR``
+(directory + glob) → default ``~/.resonite-io/`` (matches the C# Mod's default,
+shared across the host / pressure-vessel sandbox / Docker container).
 """
 
 from __future__ import annotations
@@ -12,6 +13,7 @@ from __future__ import annotations
 import glob
 import logging
 import os
+from pathlib import Path
 from types import TracebackType
 from typing import Self
 
@@ -28,7 +30,7 @@ __all__ = [
 _logger = logging.getLogger("resoio.session")
 
 _SOCKET_GLOB = "resonite-*.sock"
-_DEFAULT_SUBDIR = "resonite-io"
+_DEFAULT_SOCKET_DIR_NAME = ".resonite-io"
 
 
 class SocketNotFoundError(RuntimeError):
@@ -56,7 +58,9 @@ def _resolve_socket_path() -> str:
 
     Empty strings are treated as "unset" so a stray ``=`` in shell config
     falls through to the next discovery step rather than yielding a bogus
-    empty path.
+    empty path. The final fallback (``~/.resonite-io/``) matches the C# Mod
+    default, so a ``SessionClient()`` constructed with no arguments just
+    works whenever the Mod is running under the same effective user.
     """
     explicit = os.environ.get("RESONITE_IO_SOCKET")
     if explicit:
@@ -66,14 +70,7 @@ def _resolve_socket_path() -> str:
     if search_dir:
         return _pick_single_socket(search_dir)
 
-    runtime_dir = os.environ.get("XDG_RUNTIME_DIR")
-    if not runtime_dir:
-        raise SocketNotFoundError(
-            "Could not resolve a Resonite IO socket: neither "
-            "RESONITE_IO_SOCKET, RESONITE_IO_SOCKET_DIR, nor "
-            "XDG_RUNTIME_DIR is set."
-        )
-    return _pick_single_socket(os.path.join(runtime_dir, _DEFAULT_SUBDIR))
+    return _pick_single_socket(str(Path.home() / _DEFAULT_SOCKET_DIR_NAME))
 
 
 def _pick_single_socket(directory: str) -> str:
@@ -106,8 +103,10 @@ class SessionClient:
     When ``socket_path`` is omitted, the UDS path is resolved on
     ``__aenter__`` in this order: explicit ``RESONITE_IO_SOCKET`` env var,
     a single ``resonite-*.sock`` under ``RESONITE_IO_SOCKET_DIR``, then a
-    single one under ``$XDG_RUNTIME_DIR/resonite-io/``. Resolution can
-    raise :class:`SocketNotFoundError` or :class:`AmbiguousSocketError`.
+    single one under ``~/.resonite-io/`` (the default the C# Mod also uses,
+    shared across the host / pressure-vessel sandbox / Docker container).
+    Resolution can raise :class:`SocketNotFoundError` or
+    :class:`AmbiguousSocketError`.
     """
 
     def __init__(self, socket_path: str | None = None) -> None:

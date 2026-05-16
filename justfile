@@ -220,10 +220,13 @@ clean-py:
 
 # ===== Container ============================================================
 
-# docker-compose.yml の ${HOST_UID} / ${HOST_GID} 解釈に必要。export 付きの just 変数は
-# 全レシピに環境変数として注入される。
+# docker-compose.yml の ${HOST_UID} / ${HOST_GID} / ${HOST_HOME} 解釈に必要。
+# export 付きの just 変数は全レシピに環境変数として注入される。
 export HOST_UID := `id -u`
 export HOST_GID := `id -g`
+# host の HOME を docker-compose.yml に渡す (`~/.resonite-io/` の bind source 用)。
+# 利用者ごとに /home/<USER> が異なるため .env で固定せず just から動的に注入。
+export HOST_HOME := env_var('HOME')
 
 container-build:
     docker compose build --no-cache
@@ -234,12 +237,10 @@ container-up:
     @: "${ResonitePath:?ResonitePath が未設定です。'just init' を先に実行してください。}"
     # UDS socket 用 host ディレクトリを 0700 で先に作る。Docker 任せだと root 所有
     # で生成され、mod (host UID) が bind できなくなる。
-    # resonite-io/      : gRPC IPC (mod ↔ Python)
-    # resonite-io-debug/: debug bridge (container ↔ host-agent)
-    # $XDG_RUNTIME_DIR が無い (systemd-logind セッション外) 環境では失敗させる。
-    @: "${XDG_RUNTIME_DIR:?XDG_RUNTIME_DIR が未設定です。systemd-logind セッション内で実行してください (loginctl enable-linger は不要)。}"
-    @for sub in resonite-io resonite-io-debug; do \
-        SOCK_DIR="$XDG_RUNTIME_DIR/$sub"; \
+    # ~/.resonite-io/      : gRPC IPC (mod ↔ Python)
+    # ~/.resonite-io-debug/: debug bridge (container ↔ host-agent)
+    @for sub in .resonite-io .resonite-io-debug; do \
+        SOCK_DIR="$HOST_HOME/$sub"; \
         mkdir -p "$SOCK_DIR" && chmod 0700 "$SOCK_DIR"; \
     done
     docker compose up -d

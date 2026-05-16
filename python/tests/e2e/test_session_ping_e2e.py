@@ -21,13 +21,13 @@ import pytest
 from resoio.session import SessionClient
 
 REPO_ROOT = Path(__file__).resolve().parents[3]
-# Steam Linux Runtime (pressure-vessel) は /run/user/<UID>/ を sandbox 内で
-# 別 tmpfs に overlay するため、Resonite mod が UDS socket を XDG_RUNTIME_DIR
-# 配下に作っても container からは見えない。Mod は plugin 自身の deploy ディレクトリ
-# (gale/BepInEx/plugins/ResoniteIO/) を socket dir のデフォルトに使うため、
-# E2E ではそのディレクトリを観測する。Plugin folder は /workspace/gale/ 経由で
-# host と container が同じ inode を共有する。
-SOCKET_DIR: Path = REPO_ROOT / "gale" / "BepInEx" / "plugins" / "ResoniteIO"
+# Mod のデフォルト socket dir (`$HOME/.resonite-io/`) を観測する。
+# host (Resonite mod) の `$HOME/.resonite-io/` は docker-compose.yml で
+# container 側 `/home/dev/.resonite-io/` に bind されており (= `~/.resonite-io/`)、
+# Steam pressure-vessel sandbox 側でも host の同パスが pass-through される。
+# 3 つの mount namespace が同じ inode を指すため、host で mod が bind した
+# socket を container 内 Python から connect できる。
+SOCKET_DIR: Path = Path.home() / ".resonite-io"
 SOCKET_GLOB = "resonite-*.sock"
 SOCKET_APPEAR_TIMEOUT_S = 120.0
 SOCKET_APPEAR_POLL_S = 1.0

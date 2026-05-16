@@ -20,20 +20,19 @@ namespace ResoniteIO.Core.Session;
 ///   <item>環境変数 <c>RESONITE_IO_SOCKET</c> (フルパス指定; 主にテスト用途)</item>
 ///   <item>環境変数 <c>RESONITE_IO_SOCKET_DIR</c> 配下に
 ///     <c>resonite-{pid}.sock</c></item>
-///   <item><see cref="Start"/> の <c>defaultSocketDir</c> 引数で渡されたディレクトリ
-///     配下に <c>resonite-{pid}.sock</c>。Mod 層が plugin 自身の
-///     deploy ディレクトリ (gale 経由で <c>/workspace</c> bind mount に乗る)
-///     を渡すことで Steam pressure-vessel sandbox / Docker container 間で
-///     filesystem 共有が成立する</item>
-///   <item><c>$XDG_RUNTIME_DIR/resonite-io/</c> 配下に
-///     <c>resonite-{pid}.sock</c> (上記が無いときの最終フォールバック。
-///     pressure-vessel 配下では <c>/run/user/&lt;UID&gt;/</c> が sandbox 内
-///     tmpfs に overlay されるため共有不可)</item>
+///   <item>デフォルト: <c>$HOME/.resonite-io/resonite-{pid}.sock</c>。
+///     Steam pressure-vessel は <c>/home/$USER</c> を sandbox に
+///     pass-through するため、Resonite 上の mod とホスト/コンテナの
+///     Python client が同じ inode に到達できる (Docker 利用時は
+///     <c>${HOME}/.resonite-io</c> を <c>/home/dev/.resonite-io</c> に bind すれば
+///     username が異なっても 3 つの mount namespace で一致する)</item>
 /// </list>
 /// <para>
-/// 上記いずれも解決できない場合は <see cref="InvalidOperationException"/>。
-/// bind 直前に stale socket を best-effort で削除し、<see cref="AppDomain.ProcessExit"/>
-/// でも best-effort unlink を仕掛ける (SIGKILL 等で取りこぼした場合は次回起動時に上書き)。
+/// 上記いずれも解決できない場合 (<c>HOME</c> 未設定) は
+/// <see cref="InvalidOperationException"/>。bind 直前に stale socket を
+/// best-effort で削除し、<see cref="AppDomain.ProcessExit"/> でも
+/// best-effort unlink を仕掛ける (SIGKILL 等で取りこぼした場合は
+/// 次回起動時に上書き)。
 /// </para>
 /// </remarks>
 public sealed class SessionHost : IAsyncDisposable
@@ -74,26 +73,15 @@ public sealed class SessionHost : IAsyncDisposable
     /// </summary>
     /// <param name="log">Core が利用するログシンク。Service にも DI 経由で渡される。</param>
     /// <param name="cancellationToken">サーバの停止トリガ。</param>
-    /// <param name="defaultSocketDir">
-    /// 環境変数 <c>RESONITE_IO_SOCKET</c> / <c>RESONITE_IO_SOCKET_DIR</c> いずれも
-    /// 未設定のときに使う socket 配置ディレクトリ。Mod 層 (BepInEx plugin) は
-    /// plugin 自身の deploy ディレクトリを渡すことで pressure-vessel sandbox と
-    /// host (container) 間の bind-mount 共有を成立させる。<c>null</c> なら最終
-    /// フォールバックとして <c>$XDG_RUNTIME_DIR/resonite-io/</c> が使われる。
-    /// </param>
     /// <exception cref="InvalidOperationException">
-    /// 環境変数経由でも <paramref name="defaultSocketDir"/> でも
-    /// <c>XDG_RUNTIME_DIR</c> でも socket path を解決できなかった場合。
+    /// 環境変数経由でも <c>$HOME/.resonite-io/</c> でも socket path を
+    /// 解決できなかった場合 (<c>HOME</c> 未設定環境)。
     /// </exception>
-    public static SessionHost Start(
-        ILogSink log,
-        CancellationToken cancellationToken,
-        string? defaultSocketDir = null
-    )
+    public static SessionHost Start(ILogSink log, CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(log);
 
-        var socketPath = ResolveSocketPath(defaultSocketDir);
+        var socketPath = ResolveSocketPath();
 
         var socketDir = Path.GetDirectoryName(socketPath);
         if (!string.IsNullOrEmpty(socketDir))
@@ -199,7 +187,7 @@ public sealed class SessionHost : IAsyncDisposable
         TryUnlink(SocketPath);
     }
 
-    private static string ResolveSocketPath(string? defaultSocketDir)
+    private static string ResolveSocketPath()
     {
         var explicitPath = Environment.GetEnvironmentVariable("RESONITE_IO_SOCKET");
         if (!string.IsNullOrEmpty(explicitPath))
@@ -216,20 +204,15 @@ public sealed class SessionHost : IAsyncDisposable
             return Path.Combine(socketDir, socketName);
         }
 
-        if (!string.IsNullOrEmpty(defaultSocketDir))
+        var home = Environment.GetEnvironmentVariable("HOME");
+        if (!string.IsNullOrEmpty(home))
         {
-            return Path.Combine(defaultSocketDir, socketName);
-        }
-
-        var xdg = Environment.GetEnvironmentVariable("XDG_RUNTIME_DIR");
-        if (!string.IsNullOrEmpty(xdg))
-        {
-            return Path.Combine(xdg, "resonite-io", socketName);
+            return Path.Combine(home, ".resonite-io", socketName);
         }
 
         throw new InvalidOperationException(
             "Cannot resolve UDS path: set RESONITE_IO_SOCKET, RESONITE_IO_SOCKET_DIR, "
-                + "pass defaultSocketDir, or define XDG_RUNTIME_DIR."
+                + "or ensure HOME is set."
         );
     }
 

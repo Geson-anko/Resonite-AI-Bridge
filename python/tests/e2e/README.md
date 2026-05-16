@@ -13,7 +13,7 @@ when explicitly targeted.
    just host-agent
    ```
 
-   This brings up the debug bridge daemon (`$XDG_RUNTIME_DIR/resonite-io-debug/host-agent.sock`).
+   This brings up the debug bridge daemon (`~/.resonite-io-debug/host-agent.sock`).
    See `scripts/host_agent.py` for details.
 
 2. **`.env` configured** with a `GaleProfile` that has BepisLoader + the
@@ -34,8 +34,8 @@ cd python && uv run pytest tests/e2e/ -m e2e -v
 The test orchestrates:
 
 - `just resonite-start` (boots Resonite via Gale)
-- Polls `$XDG_RUNTIME_DIR/resonite-io/resonite-*.sock` until the mod
-  binds the UDS (up to 120 s).
+- Polls `~/.resonite-io/resonite-*.sock` until the mod binds the UDS
+  (up to 120 s).
 - Calls `Session.Ping("e2e-smoke")` once via `SessionClient`.
 - `just resonite-stop` in `finally:` so Resonite is stopped even on
   failure.

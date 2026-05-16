@@ -127,13 +127,13 @@ public sealed class ResoniteIOPlugin : BasePlugin
         {
             _hostCts = new CancellationTokenSource();
             AppDomain.CurrentDomain.ProcessExit += OnProcessExit;
-            // Plugin の deploy ディレクトリ (gale/BepInEx/plugins/ResoniteIO/) を
-            // socket dir のデフォルトに使う。gale 経由 deploy 先は host repo の
-            // ./gale/ に bind されており container `/workspace/gale/...` と
-            // 同じ inode を指すため、Steam pressure-vessel sandbox / container 間で
-            // UDS socket を共有できる。
-            var pluginDir = Path.GetDirectoryName(typeof(ResoniteIOPlugin).Assembly.Location);
-            _sessionHost = SessionHost.Start(new BepInExLogSink(Log), _hostCts.Token, pluginDir);
+            // SessionHost の default (`$HOME/.resonite-io/`) をそのまま使う。
+            // Steam pressure-vessel は host の `/home/$USER` を sandbox に
+            // pass-through するため、ホスト Python / container Python と
+            // 同じ inode に到達できる (container 側は username が異なるため
+            // `${HOME}/.resonite-io` → `/home/dev/.resonite-io` の bind を
+            // docker-compose.yml で設定済み)。
+            _sessionHost = SessionHost.Start(new BepInExLogSink(Log), _hostCts.Token);
             Log.LogInfo($"Session gRPC host bound at: {_sessionHost.SocketPath}");
         }
         catch (Exception ex)
