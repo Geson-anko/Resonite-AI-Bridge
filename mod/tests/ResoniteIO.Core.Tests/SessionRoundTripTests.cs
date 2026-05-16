@@ -56,10 +56,15 @@ public sealed class SessionRoundTripTests
             );
 
             var client = new V1.Session.SessionClient(channel);
+            var beforeNanos = (DateTimeOffset.UtcNow.UtcTicks - DateTime.UnixEpoch.Ticks) * 100L;
             var resp = await client.PingAsync(new PingRequest { Message = "hello" });
+            var afterNanos = (DateTimeOffset.UtcNow.UtcTicks - DateTime.UnixEpoch.Ticks) * 100L;
 
             Assert.Equal("hello", resp.Message);
-            Assert.True(resp.ServerUnixNanos > 0);
+            // タイムスタンプはクライアント計測の前後範囲に収まる。Tick 精度 (100 ns)
+            // で生成しているため ms 単位への切り詰めはこの assert を通らない (clock 分解能の
+            // 範囲で安全マージンを取りつつ、precision regression を検知する)。
+            Assert.InRange(resp.ServerUnixNanos, beforeNanos, afterNanos);
 
             cts.Cancel();
 
