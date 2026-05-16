@@ -15,7 +15,9 @@ default:
 #      その場合は exit 0 で抜け、ユーザーに `just init` 再実行を促す
 #      (set dotenv-load の解釈はパース時のため、同一実行内で再 source できないため)
 #   3. ResonitePath が指すディレクトリの実在を検証
-#   4. ./gale/BepisLoader.dll を見て Gale プロファイル設置を判定:
+#   4. ./gale/ を空ディレクトリとして用意 (Gale は profile path に空 dir を要求するが
+#      存在自体は許容する。先回りで作っておくと Gale GUI でパス指定が楽になる)
+#   5. ./gale/BepisLoader.dll を見て Gale プロファイル設置を判定:
 #      - 既設なら `check-gale` を呼び全部品を厳密チェック
 #      - 未設なら手順を stderr に出して非 0 exit
 init:
@@ -37,15 +39,16 @@ init:
     @: "${ResonitePath:?ResonitePath が .env に設定されていません。.env を編集してから 'just init' を再実行してください。}"
     @[ -d "$ResonitePath" ] || { echo "ERROR: ResonitePath=$ResonitePath はディレクトリではありません。" >&2; exit 1; }
     @echo "[init] ResonitePath OK: $ResonitePath"
+    @mkdir -p gale
     @if [ ! -f gale/BepisLoader.dll ]; then \
         echo "" >&2; \
-        echo "ERROR: ./gale に Gale profile が未設置です。" >&2; \
+        echo "ERROR: ./gale に Gale profile が未設置です (ディレクトリは空のまま用意済み)。" >&2; \
         echo "" >&2; \
         echo "  以下を host 上で実施してください:" >&2; \
         echo "    1. Gale v1.5.4+ をインストール (https://github.com/Kesomannen/gale)" >&2; \
         echo "    2. Gale GUI で 'Create profile' を選び、パスに <repo>/gale を指定" >&2; \
-        echo "       (このパスは EMPTY である必要があります — gale/ ディレクトリを" >&2; \
-        echo "        事前に作らないでください)" >&2; \
+        echo "       (このディレクトリは空である必要があり、just init が用意した状態が" >&2; \
+        echo "        まさにそれにあたる)" >&2; \
         echo "    3. プロファイルに以下 3 つの mod を install:" >&2; \
         echo "         - ResoniteModding-BepisLoader (>=1.5.1)" >&2; \
         echo "         - ResoniteModding-BepInExResoniteShim (>=0.9.3)" >&2; \
