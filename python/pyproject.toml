@@ -31,6 +31,10 @@ addopts = [
   "--color=yes",
   "--durations=0",
   "--strict-markers",
+  "--ignore=tests/e2e",
+]
+markers = [
+  "e2e: end-to-end tests that require host-agent and a live Resonite client",
 ]
 filterwarnings = [
   "ignore::DeprecationWarning",

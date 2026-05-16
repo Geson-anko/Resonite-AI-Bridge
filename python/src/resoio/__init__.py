@@ -6,6 +6,17 @@ The package version is single-sourced from ``pyproject.toml`` via
 
 from importlib.metadata import version as _version
 
+from resoio.session import (
+    AmbiguousSocketError,
+    SessionClient,
+    SocketNotFoundError,
+)
+
 __version__: str = _version("resoio")
 
-__all__ = ["__version__"]
+__all__ = [
+    "AmbiguousSocketError",
+    "SessionClient",
+    "SocketNotFoundError",
+    "__version__",
+]
