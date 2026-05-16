@@ -1,6 +1,3 @@
-using System.Net.Sockets;
-using Grpc.Net.Client;
-using ResoniteIO.Core.Session;
 using ResoniteIO.Core.Tests.Helpers;
 using ResoniteIO.V1;
 using Xunit;
@@ -8,110 +5,31 @@ using Xunit;
 namespace ResoniteIO.Core.Tests;
 
 /// <summary>
-/// <see cref="SessionHost"/> を tmp_path UDS に in-process で起動し、
-/// <see cref="Grpc.Net.Client.GrpcChannel"/> から実 RPC を投げて
-/// Ping echo と <c>server_unix_nanos</c> を検証する統合テスト。
+/// <see cref="ResoniteIO.Core.Session.SessionService"/> の <c>Ping</c> RPC 振る舞いを
+/// in-process Kestrel ラウンドトリップで検証する。
 /// </summary>
 /// <remarks>
-/// 同一 process の <c>RESONITE_IO_SOCKET</c> env var を読み書きするため、
-/// 同じく env var を触る他のテスト ((<see cref="SessionBridgeWiringTests"/> 等))
-/// と並列で走ると socket path が混線する。xunit collection
-/// <c>"SessionHostEnv"</c> でシリアル化する。
+/// host 起動 / channel 構築 / 後片付けは <see cref="SessionHostHarness"/> に閉じ込めて
+/// いるため、本テストは「Ping を送り、echo + timestamp を確認する」シナリオ自体に集中する。
+/// <c>RESONITE_IO_SOCKET</c> env var を内部で扱う他テストとの競合を避けるため
+/// xunit collection <c>"SessionHostEnv"</c> でシリアル化する。
 /// </remarks>
 [Collection("SessionHostEnv")]
 public sealed class SessionRoundTripTests
 {
     [Fact]
-    public async Task SessionHost_Ping_EchoesMessageAndStampsTimestamp()
+    public async Task Ping_EchoesMessage_AndStampsServerTimestamp()
     {
-        var tmpSocketPath = Path.Combine(Path.GetTempPath(), $"rio-test-{Guid.NewGuid():N}.sock");
-        var originalEnv = Environment.GetEnvironmentVariable("RESONITE_IO_SOCKET");
-        Environment.SetEnvironmentVariable("RESONITE_IO_SOCKET", tmpSocketPath);
-        try
-        {
-            using var cts = new CancellationTokenSource();
-            await using var host = SessionHost.Start(new NullLogSink(), cts.Token);
+        await using var harness = await SessionHostHarness.StartAsync();
+        using var channel = harness.CreateChannel();
+        var client = new V1.Session.SessionClient(channel);
 
-            Assert.Equal(tmpSocketPath, host.SocketPath);
+        var beforeNanos = UnixNanosClock.Now();
+        var response = await client.PingAsync(new PingRequest { Message = "hello" });
+        var afterNanos = UnixNanosClock.Now();
 
-            // Kestrel の async bind 完了を待つ (socket file 出現を poll)。
-            await WaitUntilAsync(
-                () => File.Exists(tmpSocketPath),
-                TimeSpan.FromSeconds(5),
-                "socket file did not appear"
-            );
-
-            using var channel = GrpcChannel.ForAddress(
-                "http://localhost",
-                new GrpcChannelOptions
-                {
-                    HttpHandler = new SocketsHttpHandler
-                    {
-                        ConnectCallback = async (_, ct) =>
-                        {
-                            var sock = new Socket(
-                                AddressFamily.Unix,
-                                SocketType.Stream,
-                                ProtocolType.Unspecified
-                            );
-                            await sock.ConnectAsync(new UnixDomainSocketEndPoint(tmpSocketPath), ct)
-                                .ConfigureAwait(false);
-                            return new NetworkStream(sock, ownsSocket: true);
-                        },
-                    },
-                }
-            );
-
-            var client = new V1.Session.SessionClient(channel);
-            var beforeNanos = (DateTimeOffset.UtcNow.UtcTicks - DateTime.UnixEpoch.Ticks) * 100L;
-            var resp = await client.PingAsync(new PingRequest { Message = "hello" });
-            var afterNanos = (DateTimeOffset.UtcNow.UtcTicks - DateTime.UnixEpoch.Ticks) * 100L;
-
-            Assert.Equal("hello", resp.Message);
-            // タイムスタンプはクライアント計測の前後範囲に収まる。Tick 精度 (100 ns)
-            // で生成しているため ms 単位への切り詰めはこの assert を通らない (clock 分解能の
-            // 範囲で安全マージンを取りつつ、precision regression を検知する)。
-            Assert.InRange(resp.ServerUnixNanos, beforeNanos, afterNanos);
-
-            cts.Cancel();
-
-            // 停止後、socket file が消えていることを poll で確認。
-            await WaitUntilAsync(
-                () => !File.Exists(tmpSocketPath),
-                TimeSpan.FromSeconds(5),
-                "socket file was not unlinked after shutdown"
-            );
-        }
-        finally
-        {
-            Environment.SetEnvironmentVariable("RESONITE_IO_SOCKET", originalEnv);
-            // best-effort cleanup if poll above failed.
-            try
-            {
-                File.Delete(tmpSocketPath);
-            }
-            catch
-            {
-                // ignore
-            }
-        }
-    }
-
-    private static async Task WaitUntilAsync(
-        Func<bool> predicate,
-        TimeSpan timeout,
-        string failureMessage
-    )
-    {
-        var deadline = DateTime.UtcNow + timeout;
-        while (DateTime.UtcNow < deadline)
-        {
-            if (predicate())
-            {
-                return;
-            }
-            await Task.Delay(50);
-        }
-        Assert.Fail(failureMessage);
+        Assert.Equal("hello", response.Message);
+        // タイムスタンプはクライアント計測の前後範囲に収まる (Tick 精度 = 100 ns)。
+        Assert.InRange(response.ServerUnixNanos, beforeNanos, afterNanos);
     }
 }
