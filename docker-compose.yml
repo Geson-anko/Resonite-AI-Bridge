@@ -2,15 +2,15 @@
 #
 # - `name: resonite-io-${USER}` でプロジェクト・コンテナ・volume を ${USER}
 #   名前空間化し、同一ホストで複数ユーザーが衝突せず共存できるようにする。
+# - host repo を `/workspace` に rw bind する。dev ユーザーの UID/GID を host と
+#   一致させているため、container 内で生成した成果物は host から所有権そのまま見える。
+#   build 中間生成物 (bin/obj/.venv 等) は .gitignore 済み。
 # - host 側 ${ResonitePath} (Resonite 実行ディレクトリ) を ro bind するのは
 #   FrooxEngine.dll 等の HintPath 参照用 (csproj が `/resonite` を見に行く)。
 #   コンテナ内では `environment: ResonitePath: /resonite` で上書きする。
-# - mod の deploy 先は host repo 直下の Gale プロファイル (`./gale/`)。
-#   ro 親 + rw 子の重ね bind で /gale を ro、deploy 先のみ rw にする:
-#     1. ./gale を /gale に ro bind
-#     2. ./gale/BepInEx/plugins/ResoniteIO に rw 子 bind (PostBuild Copy 先)
-#   重ね bind は Linux Docker 限定の挙動。順序は親→子。
-#   コンテナ内では `environment: GalePath: /gale` で csproj が deploy 先を解決。
+# - mod の deploy 先は host repo 直下の Gale プロファイル `./gale/` で、これは
+#   `/workspace/gale` 経由でそのまま container から rw に見える (専用 bind 不要)。
+#   コンテナ内では `environment: GalePath: /workspace/gale` で csproj が deploy 先を解決。
 # - ${HOST_UID} / ${HOST_GID} は justfile の container-* レシピが
 #   `id -u` / `id -g` から動的に注入する。.env には書かない。
 # - host と container で `/run/user/${HOST_UID}/resonite-io` を rw bind し、
@@ -37,7 +37,7 @@ services:
     env_file: .env
     environment:
       ResonitePath: /resonite
-      GalePath: /gale
+      GalePath: /workspace/gale
       # host と container で $XDG_RUNTIME_DIR を一致させ、UDS の既定ディレクトリ
       # (/run/user/${HOST_UID}/resonite-io) を両側で同じ絶対パスで解決させる。
       XDG_RUNTIME_DIR: /run/user/${HOST_UID}
@@ -45,11 +45,8 @@ services:
     stdin_open: true
     tty: true
     volumes:
-      - workspace:/workspace
-      - ./:/source:ro
+      - ./:/workspace
       - ${ResonitePath}:/resonite:ro
-      - ./gale:/gale:ro
-      - ./gale/BepInEx/plugins/ResoniteIO:/gale/BepInEx/plugins/ResoniteIO:rw
       # UDS socket 共有: host の Resonite mod が bind した socket を container 内の
       # Python から connect する。HOST_UID 名前空間下の同一絶対パスを使う。
       # host 側ディレクトリは justfile container-up が事前に 0700 で作成する
@@ -65,8 +62,6 @@ services:
       - cache-uv:/home/dev/.cache/uv
 
 volumes:
-  workspace:
-    name: resonite-io-workspace-${USER}
   cache-nuget:
     name: resonite-io-cache-nuget-${USER}
   cache-uv:

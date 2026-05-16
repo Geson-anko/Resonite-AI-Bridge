@@ -3,9 +3,11 @@
 # resonite-io 開発環境イメージ。
 #   - debian:bookworm-slim ベース。
 #   - .NET 10 SDK / uv / just / protoc を /usr/local 配下に root で固定インストール。
-#   - host UID/GID 一致の `dev` ユーザーで実行 (bind 経由の deploy 物が host 所有になる)。
-#   - **ソースコードは COPY しない**。/workspace は named volume、/source は host bind。
-#     bootstrap (rsync + dotnet tool restore + uv sync) は scripts/container-init.sh が行う。
+#   - host UID/GID 一致の `dev` ユーザーで実行 (bind 経由の成果物が host 所有になる)。
+#   - **ソースコードは COPY しない**。/workspace は host repo を直接 bind mount するので、
+#     host 編集が即座に container 側に反映される。bootstrap copy は不要。
+#     deps restore (dotnet tool restore + uv sync + pre-commit install) は
+#     scripts/container-init.sh が冪等に行う。
 
 FROM debian:bookworm-slim
 
@@ -67,10 +69,12 @@ RUN set -eux; \
     echo '[ -f /usr/share/bash-completion/bash_completion ] && . /usr/share/bash-completion/bash_completion' \
       >> /etc/bash.bashrc
 
-# named volume mount point を image 内に dev 所有で先に作っておくと、Docker が初回マウント
-# 時にディレクトリ属性を継承し volume が dev 所有で初期化される (root 所有事故の予防)。
-# /home/dev/.claude は container-init.sh が settings.container.json への symlink を張る
-# 前提でディレクトリだけ用意する。
+# /workspace は host repo を bind するため、image 内の空ディレクトリは mount 時に
+# 隠される。それでも先行作成しておくと bind 失敗時に container が `/workspace` 上で
+# 起動できるため fallback として残す。/home/dev/.claude は container-init.sh が
+# settings.container.json への symlink を張る前提でディレクトリだけ用意する。
+# キャッシュ系 (.nuget / .cache/uv) は named volume のマウント先で、dev 所有で
+# 先行作成しておくことで Docker が初回マウント時に属性を継承する。
 RUN groupadd -g ${USER_GID} dev \
  && useradd -m -u ${USER_UID} -g ${USER_GID} -s /bin/bash dev \
  && mkdir -p /workspace /home/dev/.nuget/packages /home/dev/.cache/uv /home/dev/.claude \
