@@ -62,9 +62,23 @@ def _run_just(
     )
 
 
+def _purge_stale_sockets(directory: Path) -> None:
+    """Remove leftover socket files from prior runs.
+
+    Mod の ``AppDomain.ProcessExit`` cleanup は ``just resonite-stop`` の SIGKILL
+    で skip されることがあり、stale socket が残ると次回 run で
+    ``ConnectionRefusedError`` を踏む。テスト開始直前に必ず一掃する。
+    """
+    if not directory.is_dir():
+        return
+    for sock in directory.glob(SOCKET_GLOB):
+        sock.unlink(missing_ok=True)
+
+
 @pytest.mark.e2e
 def test_session_ping_e2e_smoke() -> None:
     """Boot Resonite via host-agent, send one Ping, then shut Resonite down."""
+    _purge_stale_sockets(SOCKET_DIR)
     _run_just("resonite-start")
     try:
         socket_path = _wait_for_socket(SOCKET_DIR, SOCKET_APPEAR_TIMEOUT_S)
@@ -82,3 +96,4 @@ def test_session_ping_e2e_smoke() -> None:
         # if Resonite already died for some reason.
         _run_just("resonite-stop", check=False, timeout=30.0)
         os.environ.pop("RESONITE_IO_SOCKET", None)
+        _purge_stale_sockets(SOCKET_DIR)
