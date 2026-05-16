@@ -59,13 +59,15 @@ public sealed class ResoniteIOPlugin : BasePlugin
     }
 
     /// <summary>
-    /// 同梱した ASP.NET Core / gRPC ランタイム DLL を plugin folder から解決する。
+    /// 同梱した ASP.NET Core / gRPC ランタイム DLL を plugin folder から解決する
+    /// <see cref="AssemblyLoadContext.Resolving"/> ハンドラ。
     /// </summary>
     /// <remarks>
-    /// BepInEx は plugin folder を Default AssemblyLoadContext の probe path に
-    /// 追加しないため、`Microsoft.AspNetCore` など Core が遅延 load する
-    /// 隣接 DLL を runtime が見つけられない。Plugin の置かれたディレクトリを
-    /// 自前で probe して読み込む。
+    /// BepInEx は plugin folder を Default ALC の probe path に登録しないため、
+    /// <see cref="SessionHost"/> 経由で遅延ロードされる
+    /// <c>Microsoft.AspNetCore.*</c> / <c>Grpc.AspNetCore.*</c> 等の隣接 DLL を
+    /// runtime が見つけられず <see cref="FileNotFoundException"/> になる。
+    /// 自前で plugin dir を probe してフォールバック解決する。
     /// </remarks>
     private static Assembly? ResolveFromPluginDirectory(
         AssemblyLoadContext context,

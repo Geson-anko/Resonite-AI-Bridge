@@ -45,7 +45,8 @@ public sealed class SessionHost : IAsyncDisposable
     private bool _disposed;
 
     /// <summary>
-    /// 本ホストが bind した UDS のフルパス。
+    /// 本ホストが bind 済みの UDS フルパス。<see cref="Start"/> 復帰時点で
+    /// filesystem に socket が現れていることが保証される (client が即接続して良い)。
     /// </summary>
     public string SocketPath { get; }
 
@@ -65,9 +66,11 @@ public sealed class SessionHost : IAsyncDisposable
     }
 
     /// <summary>
-    /// gRPC server を構築して起動し、<see cref="SessionHost"/> を返す。
-    /// 内部的に <see cref="WebApplication.RunAsync(CancellationToken)"/> を
-    /// バックグラウンドタスクで回す。
+    /// gRPC server を構築・起動し、Kestrel の listen 完了を同期的に待ってから
+    /// <see cref="SessionHost"/> を返す。復帰時点で <see cref="SocketPath"/> は
+    /// 受け入れ可能 (client は race 無しに connect できる)。shutdown 待ちは
+    /// バックグラウンドタスクで回り、停止は本オブジェクトの dispose か
+    /// <paramref name="cancellationToken"/> 経由で行う。
     /// </summary>
     /// <param name="log">Core が利用するログシンク。Service にも DI 経由で渡される。</param>
     /// <param name="cancellationToken">サーバの停止トリガ。</param>

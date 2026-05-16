@@ -32,12 +32,23 @@ _DEFAULT_SUBDIR = "resonite-io"
 
 
 class SocketNotFoundError(RuntimeError):
-    """Raised when no Resonite IO socket can be discovered."""
+    """No Resonite IO socket could be discovered.
+
+    Raised when neither an explicit path nor any candidate
+    ``resonite-*.sock`` matched the configured search directory. Usually
+    means the mod is not running or the discovery env vars do not point
+    at the directory it bound to.
+    """
 
 
 class AmbiguousSocketError(RuntimeError):
-    """Raised when multiple candidate sockets are found and no override is
-    set."""
+    """Multiple candidate sockets were found and no override resolved them.
+
+    Raised when more than one ``resonite-*.sock`` exists in the search
+    directory (e.g. a stale socket from a previous Resonite process plus
+    the live one). Set ``RESONITE_IO_SOCKET`` to the desired path to
+    disambiguate.
+    """
 
 
 def _resolve_socket_path() -> str:
@@ -84,7 +95,20 @@ def _pick_single_socket(directory: str) -> str:
 
 
 class SessionClient:
-    """Async client for the Resonite IO ``Session`` service over a UDS."""
+    """Async client for the Resonite IO ``Session`` service over a UDS.
+
+    Use as an async context manager so the underlying gRPC channel is
+    closed deterministically::
+
+        async with SessionClient() as client:
+            response = await client.ping("hello")
+
+    When ``socket_path`` is omitted, the UDS path is resolved on
+    ``__aenter__`` in this order: explicit ``RESONITE_IO_SOCKET`` env var,
+    a single ``resonite-*.sock`` under ``RESONITE_IO_SOCKET_DIR``, then a
+    single one under ``$XDG_RUNTIME_DIR/resonite-io/``. Resolution can
+    raise :class:`SocketNotFoundError` or :class:`AmbiguousSocketError`.
+    """
 
     def __init__(self, socket_path: str | None = None) -> None:
         # Defer socket resolution until __aenter__ so env vars can be patched
