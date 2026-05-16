@@ -47,6 +47,9 @@ minversion = "6.0"
 # 構成にしており (tests/e2e/<name>.py)、`just e2e-test` 経由で明示的にパスを
 # 渡したときだけ collect される。
 testpaths = "tests/resoio"
+# tests/helpers.py を `from tests.helpers import ...` で解決させるため、
+# python/ を sys.path に追加する。
+pythonpath = "."
 asyncio_default_fixture_loop_scope = "function"
 asyncio_mode = "auto"
 
