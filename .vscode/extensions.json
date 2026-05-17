@@ -23,7 +23,6 @@
     "redhat.vscode-yaml",
     "editorconfig.editorconfig",
     "davidanson.vscode-markdownlint",
-    "streetsidesoftware.code-spell-checker",
     "mikestead.dotenv"
   ]
 }
