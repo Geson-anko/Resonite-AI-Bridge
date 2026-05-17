@@ -27,6 +27,28 @@ public sealed class CameraService : V1.Camera.CameraBase
         _bridge = bridge;
     }
 
+    /// <summary>
+    /// Bridge から 1 フレームずつ取り出して proto に詰めて流す server-streaming RPC。
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// 解像度は <c>request.Width</c>/<c>Height</c> が 0 以下のとき
+    /// <see cref="DefaultWidth"/> × <see cref="DefaultHeight"/> (640×480) を採用する。
+    /// <c>fps_limit</c> が 0 以下なら pacing 無し (Bridge が返せる最速)、それ以上なら
+    /// 1 フレーム周期 = <c>1/fps_limit</c> 秒で sleep する best-effort pacing。
+    /// </para>
+    /// <para>
+    /// 例外翻訳: <see cref="ICameraBridge"/> 未注入は <c>Unavailable</c>、
+    /// <see cref="CameraNotReadyException"/> は <c>FailedPrecondition</c>、その他の Bridge
+    /// 例外は <c>Internal</c>。<c>FailedPrecondition</c> はクライアントが時間を置いて
+    /// 再 stream する想定 (LocalUser や world が ready 待ちのとき発生する)。
+    /// </para>
+    /// <para>
+    /// <c>frame_id</c> は本 service の monotonic counter で 0 から振り直す
+    /// (Bridge 側 ID とは独立)。client は同一 stream 内のフレームを抜けや並び替え無しに
+    /// 識別できる。
+    /// </para>
+    /// </remarks>
     public override async Task StreamFrames(
         V1.CameraStreamRequest request,
         IServerStreamWriter<V1.CameraFrame> responses,

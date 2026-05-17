@@ -95,11 +95,13 @@ class CameraClient:
     ) -> AsyncIterator[Frame]:
         """Stream camera frames from the server.
 
-        ``width`` / ``height`` of 0 ask the server for its default
-        resolution. ``fps_limit`` of 0 means uncapped (best-effort
-        native fps). Large resolutions (e.g. 4096x4096 = 64 MB per
-        frame) are not capped client-side — the caller is responsible
-        for OOM management.
+        ``width`` / ``height`` of 0 (the default) request the server
+        default of 640×480. ``fps_limit`` of 0 means uncapped
+        (best-effort native fps); a positive value asks the server to
+        pace frames at ``1 / fps_limit`` seconds. Large resolutions
+        (e.g. 4096×4096 = 64 MB per frame) are not capped client-side —
+        the caller is responsible for OOM management. Raises
+        :class:`RuntimeError` if called outside ``async with``.
         """
         stub = self._stub
         if stub is None:
