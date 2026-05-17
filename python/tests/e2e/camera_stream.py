@@ -52,7 +52,7 @@ class TestCameraStream:
         # opencv build shipped via pip; if the container OpenCV refuses it
         # the writer will silently fail to open and ``out_path`` will stay
         # zero-bytes (caught by the assertion below).
-        fourcc = cv2.VideoWriter_fourcc(*"mp4v")
+        fourcc = cv2.VideoWriter.fourcc(*"mp4v")
         writer = cv2.VideoWriter(
             str(out_path),
             fourcc,
