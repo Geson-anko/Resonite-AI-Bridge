@@ -9,3 +9,4 @@
 - [proto RPC envelope naming except](feedback_proto_rpc_naming_except.md) — RPC_REQUEST/RESPONSE_STANDARD_NAME は buf.yaml で except 済み。streaming のデータ型はモダリティ固有名でよい。
 - [streaming fps_limit テストの tolerance](feedback_streaming_fps_limit_test_tolerance.md) — pacing 検証は理論値 +2 ぶんの上限スラックで書く。「+1 edge frame + 1 boundary slip」。
 - [Bridge での engine thread ディスパッチ](feedback_bridge_engine_thread_dispatch.md) — コンポーネントグラフ変更は World.RunSynchronously + TaskCompletionSource、純粋読みは任意スレッド。
+- [uv tool install resoio version skew](feedback_uv_tool_install_resoio.md) — `uv tool install --editable` ignores uv.lock; isolated env picks betterproto2 0.10 against compiler 0.9 stubs and ImportErrors.
