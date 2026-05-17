@@ -55,6 +55,8 @@ async def _run(args: argparse.Namespace) -> int:
 
     async with SessionClient(args.socket) as client:
         for _ in range(args.count):
+            # monotonic_ns: immune to wall-clock jumps (NTP step, DST) that
+            # would otherwise produce negative or inflated RTTs.
             t0 = time.monotonic_ns()
             try:
                 resp = await asyncio.wait_for(

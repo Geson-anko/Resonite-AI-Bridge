@@ -29,7 +29,9 @@ class Frame:
 
     ``pixels`` is an ``(H, W, 4)`` RGBA8 view over the protobuf payload
     bytes (read-only; call ``.copy()`` for a writable array). Row 0 is
-    the image top.
+    the image top. ``unix_nanos`` is the server-side capture timestamp
+    in UTC nanos since the Unix epoch. ``frame_id`` is a server-side
+    monotonic counter that restarts at 0 per ``stream()`` call.
     """
 
     pixels: NDArray[np.uint8]

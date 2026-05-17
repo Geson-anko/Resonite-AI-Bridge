@@ -136,6 +136,8 @@ async def _capture_loop(args: argparse.Namespace, out: BinaryIO) -> int:
                 y4m.write_frame(out, pixels, chroma)
                 out.flush()
             except BrokenPipeError:
+                # Downstream closed stdout (e.g. `resoio capture | head`).
+                # That is a clean exit, not a failure.
                 return 0
             frame_count += 1
             if args.verbose:
@@ -152,6 +154,10 @@ async def _run(args: argparse.Namespace) -> int:
     try:
         if args.duration is None:
             return await _capture_loop(args, out)
+        # wait_for cancels the coroutine on timeout, which unwinds the
+        # `async with CameraClient(...)` inside _capture_loop and closes
+        # the gRPC channel cleanly. Treat the resulting TimeoutError as
+        # a normal end-of-capture, not an error.
         try:
             return await asyncio.wait_for(
                 _capture_loop(args, out), timeout=args.duration
