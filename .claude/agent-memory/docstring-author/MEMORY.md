@@ -1,1 +1,1 @@
-- [Step 2 must-keep WHYs](project_step2_must_keep_whys.md) — load-bearing comments under `mod/src/ResoniteIO/` and Core tests that future trim passes must preserve
+- [Load-bearing WHYs (Step 2+3)](project_load_bearing_whys.md) — load-bearing comments under `mod/src/ResoniteIO{,.Core}/` and Core tests that future trim passes must preserve (covers Session loader + Camera bridge)

@@ -127,84 +127,95 @@ ______________________________________________________________________
 - [x] `pre-commit` (ruff / pyupgrade / docformatter / mdformat / codespell / uv-lock / pygrep / shellcheck / shfmt)
 - [x] VSCode 推奨拡張一覧 (`.vscode/extensions.json`): C# Dev Kit / Pylance / Ruff / csharpier / buf / docker など
 - ~~`scripts/setup.sh`~~ (廃止: Docker 環境に置き換え)
-- [x] **UDS socket 共有ディレクトリの bind**: `$XDG_RUNTIME_DIR/resonite-io/` (= `/run/user/$UID/resonite-io/`) を host / container 双方で同一絶対パスとして bind 共有。`docker-compose.yml` に long-form bind (`/run/user/${HOST_UID}/resonite-io:/run/user/${HOST_UID}/resonite-io:rw`、`create_host_path: false`) と `environment.XDG_RUNTIME_DIR: /run/user/${HOST_UID}` を追加。host 側ディレクトリは `just container-up` が `0700` で事前作成する。socket ファイル名は mod 側で `resonite-{pid}.sock` を自動命名 (Step 2 で実装) し、Python client は `RESONITE_IO_SOCKET` / `RESONITE_IO_SOCKET_DIR` / 既定 (`$XDG_RUNTIME_DIR/resonite-io/`) の優先順で探索する (`.env` への記述は通常不要)。
+- [x] **UDS socket 共有ディレクトリの bind**: 当初は `$XDG_RUNTIME_DIR/resonite-io/` を採用予定だったが、Step 2 実装時に **pressure-vessel (Steam Linux Runtime) が `/run/user/<UID>` を sandbox tmpfs で覆い、host 側 IPC を通さない**ことが判明 (詳細: `.claude/memory/reference_pressure_vessel_paths.md`)。最終的に `$HOME/.resonite-io/` を host / container 双方で同一絶対パスとして rw bind 共有する方式に変更 (`docker-compose.yml` の long-form bind: `${HOST_HOME}/.resonite-io:/home/dev/.resonite-io:rw`、`HOST_HOME` は justfile が `env_var('HOME')` から動的注入)。container 側 username は `dev` 固定だが host の `~` と同じ inode に到達する。host 側ディレクトリは `just container-up` が `0700` で事前作成 (Docker 任せだと root 所有になる)。socket ファイル名は mod 側で `resonite-{Process.Id}.sock` を自動命名 (Step 2 で実装済み)。Python client は `RESONITE_IO_SOCKET` (フルパス) → `RESONITE_IO_SOCKET_DIR` → 既定 `$HOME/.resonite-io/` の優先順で探索 (`.env` への記述は通常不要)。
+- [x] **Container ↔ Host Resonite debug bridge**: Step 2 で `scripts/host_agent.py` (host 常駐 daemon) + `scripts/resonite_cli.py` (container 側 client) を追加。container 内 `just resonite-start/stop/status` で host の Resonite を Gale 経由で起動・停止できる。トランスポートは本番 IPC と分離した `$HOME/.resonite-io-debug/host-agent.sock` (同じく rw bind)。print-debug (`just log`) と並ぶ二本目の debug 経路で、proto / Core / mod を一切触らない。
 
-### C. モノレポ構造 (目標形)
+### C. モノレポ構造
 
 - **リポジトリ名**: `resonite-io`
-- **C# コアライブラリ アセンブリ名**: `ResoniteIO.Core` (Step 2 で新設)
+- **C# コアライブラリ アセンブリ名**: `ResoniteIO.Core` (Step 2 で新設済み)
 - **C# Mod アセンブリ名**: `ResoniteIO` (mod アダプタ層)
 - **Python パッケージ名**: `resoio`
 
-下記は Core/Mod 分離後の目標構造。現状 (Step 1 完了時点) では `ResoniteIO.Core` プロジェクトはまだ存在せず、Session/Camera/... のソースは `mod/src/ResoniteIO/` の `.gitkeep` 配下に留まる。Step 2 以降で Core 側にロジックを移していく。
+下記は Step 3 完了時点の実構造。Audio / Locomotion / Manipulation 配下は `.gitkeep` のみで、後続 Step で実装が入る。
 
 ```text
 resonite-io/
 ├── Dockerfile                     # 開発コンテナ image (debian + .NET 10 + uv + protoc)
-├── docker-compose.yml             # dev サービス定義 (UID/GID 一致 / repo を /workspace に bind / ResonitePath / XDG_RUNTIME_DIR + UDS bind)
-├── justfile                       # ルートタスクランナー (build / test / container-*)
-├── buf.yaml                       # proto lint/breaking (modules: proto/)
+├── docker-compose.yml             # dev サービス定義 (UID/GID 一致 / repo を /workspace に bind / ResonitePath ro bind / ~/.resonite-io{,-debug}/ rw bind)
+├── justfile                       # ルートタスクランナー (build / test / container-* / resonite-* / host-agent)
+├── buf.yaml                       # proto lint/breaking (modules: proto/、SERVICE_SUFFIX + RPC_*_STANDARD_NAME を except)
 ├── .pre-commit-config.yaml
-├── .env.example                   # ResonitePath / UDS override 等の雛形 (.env は gitignore)
+├── .env.example                   # ResonitePath / GaleProfile / GaleBin の雛形 (.env は gitignore)
+├── resonite_io_plan.md            # ◀ 本ファイル (全体計画書)
 │
 ├── proto/                         # 単一の真実: .proto 定義
 │   └── resonite_io/v1/
-│       └── session.proto          # Step 1 完了 (Ping RPC)
-│                                  # camera/audio/locomotion/manipulation は後続 Step で追加
+│       ├── session.proto          # Step 1 (Ping RPC)
+│       └── camera.proto           # Step 3 (StreamFrames server-streaming)
+│                                  # audio/locomotion/manipulation は後続 Step で追加
 │
-├── mod/                           # C# 側 (.NET 10、二層構成)
+├── mod/                           # C# 側 (.NET 10、Core/Mod 二層構成)
 │   ├── ResoniteIO.sln
 │   ├── Directory.Build.{props,targets}
 │   ├── NuGet.config
 │   ├── thunderstore.toml          # Thunderstore メタデータ (tcli が読む)
 │   ├── icon.png
 │   ├── src/
-│   │   ├── ResoniteIO.Core/        # ◆ Core 層 (Step 2 で新設、Resonite 非依存)
-│   │   │   ├── ResoniteIO.Core.csproj   # Protobuf <Server> + Grpc.AspNetCore.Server
-│   │   │   ├── Logging/ILogSink.cs       # BepInEx 非依存のロギング abstraction
-│   │   │   ├── Bridge/                   # mod から注入される engine callback IF
-│   │   │   │   ├── ISessionBridge.cs
-│   │   │   │   ├── ICameraBridge.cs      # Step 3+
-│   │   │   │   ├── IAudioBridge.cs       # Step 6+
-│   │   │   │   ├── ILocomotionBridge.cs  # Step 4+
-│   │   │   │   └── IManipulationBridge.cs# Step 5+
-│   │   │   └── Session/
-│   │   │       ├── SessionService.cs     # Session.SessionBase 実装
-│   │   │       └── SessionHost.cs        # Kestrel UDS host
-│   │   └── ResoniteIO/             # ◆ Mod 層 (BepInEx adapter, ProjectReference: Core)
-│   │       ├── ResoniteIO.csproj
-│   │       ├── ResoniteIOPlugin.cs # BasePlugin + OnEngineReady で Core を起動
-│   │       ├── Logging/
-│   │       │   └── BepInExLogSink.cs    # ILogSink → ManualLogSource adapter
-│   │       └── Bridge/             # FrooxEngine 依存実装 (Core IF の実装)
-│   │           ├── FrooxEngineSessionBridge.cs
-│   │           ├── FrooxEngineCameraBridge.cs       # Step 3+
-│   │           ├── FrooxEngineAudioBridge.cs        # Step 6+
-│   │           ├── FrooxEngineLocomotionBridge.cs   # Step 4+
-│   │           └── FrooxEngineManipulationBridge.cs # Step 5+
+│   │   ├── ResoniteIO.Core/                       # ◆ Core 層 (Resonite 非依存)
+│   │   │   ├── ResoniteIO.Core.csproj             # Protobuf <Server> + Grpc.AspNetCore.Server
+│   │   │   ├── Logging/ILogSink.cs                # BepInEx 非依存のロギング abstraction
+│   │   │   ├── Bridge/                            # mod から注入される engine callback IF
+│   │   │   │   ├── ISessionBridge.cs              # Step 2
+│   │   │   │   └── ICameraBridge.cs               # Step 3
+│   │   │   ├── Session/
+│   │   │   │   ├── SessionService.cs              # Session.SessionBase 実装
+│   │   │   │   └── SessionHost.cs                 # Kestrel UDS host (~/.resonite-io/)
+│   │   │   └── Camera/CameraService.cs            # StreamFrames (server-streaming) 実装
+│   │   └── ResoniteIO/                            # ◆ Mod 層 (BepInEx adapter, ProjectReference: Core)
+│   │       ├── ResoniteIO.csproj                  # Core 依存 DLL + AspNetCore shared framework を gale/ に deploy
+│   │       ├── ResoniteIOPlugin.cs                # BasePlugin + OnEngineReady で Core を起動
+│   │       ├── Loading/PluginAssemblyResolver.cs  # Resonite 同梱旧 Google.Protobuf より Core 同梱版を優先解決
+│   │       ├── Logging/BepInExLogSink.cs          # ILogSink → ManualLogSource adapter
+│   │       ├── Bridge/                            # FrooxEngine 依存実装 (Core IF の実装)
+│   │       │   ├── FrooxEngineSessionBridge.cs    # Step 2
+│   │       │   └── FrooxEngineCameraBridge.cs     # Step 3
+│   │       └── {Audio,Locomotion,Manipulation}/   # .gitkeep のみ (Step 4+ で実装)
 │   └── tests/
-│       ├── ResoniteIO.Core.Tests/  # ◆ Kestrel ラウンドトリップ含む統合テスト (Resonite 不要)
-│       └── ResoniteIO.Tests/       # mod adapter smoke test (BepInEx 依存)
+│       ├── ResoniteIO.Core.Tests/                 # Kestrel ラウンドトリップ + Camera streaming (Fake Bridge) を含む統合 xunit
+│       ├── ResoniteIO.Tests/                      # mod 側 smoke + BepInExLogSink 等の adapter テスト
+│       └── manual/                                # 実機 (Resonite 起動) を要する手順書 (Markdown)
 │
 ├── python/                        # Python 側 (Resonite 非依存)
 │   ├── pyproject.toml             # requires-python >=3.12, deps: betterproto2[grpclib]
 │   ├── uv.lock
 │   ├── src/resoio/
-│   │   ├── __init__.py            # importlib.metadata で __version__ を露出
+│   │   ├── __init__.py            # importlib.metadata で __version__、SessionClient / CameraClient を re-export
 │   │   ├── py.typed
-│   │   ├── session.py             # placeholder (Step 2 で SessionClient 実装)
-│   │   └── _generated/            # protoc 出力 (commit)
+│   │   ├── _socket.py             # private: RESONITE_IO_SOCKET / _DIR / ~/.resonite-io 探索
+│   │   ├── session.py             # SessionClient (async context manager) + Ping
+│   │   ├── camera.py              # CameraClient (numpy ndarray yield)
+│   │   └── _generated/            # protoc 出力 (commit、pyright/ruff/coverage の exclude 対象)
 │   │       └── resonite_io/v1/
-│   └── tests/resoio/
+│   └── tests/
+│       ├── resoio/{test_session,test_camera,test_init}.py
+│       └── e2e/                   # 実 Resonite 接続テスト (pytest --ignore=python/tests/e2e で除外)
 │
 ├── scripts/
 │   ├── gen_proto.sh               # .proto → Python コード生成 (C# 側は csproj が build-time に生成)
-│   ├── decompile.sh               # ilspycmd で Resonite first-party DLL を decompiled/ に展開
+│   ├── decompile.sh               # ilspycmd で Resonite first-party + Renderite Unity DLL を decompiled/ に展開
 │   ├── container-init.sh          # container 内 deps restore
-│   └── lib.sh                     # 共通シェルユーティリティ
+│   ├── lib.sh                     # 共通シェルユーティリティ
+│   ├── host_agent.py              # host 常駐 daemon (Step 2 追加、container → host Resonite bridge)
+│   └── resonite_cli.py            # container 側 client (`just resonite-{start,stop,status}` から呼ばれる)
 │
 ├── decompiled/                    # ILSpy 出力 (gitignore、`just decompile` で再生成)
-├── .claude/                       # Claude Code 規約 + memory
+├── gale/                          # Gale (Resonite mod manager) profile 展開先 (gitignore、host で Gale が管理)
+├── .claude/
+│   ├── memory/                    # プロジェクト固有 memory (本リポジトリで git 管理)
+│   ├── agent-memory/              # サブエージェント由来の memory (同上)
+│   ├── agents/                    # subagent 定義
+│   └── settings*.json
 ├── .github/workflows/             # (未整備)
 └── README.md
 ```
@@ -224,7 +235,7 @@ resonite-io/
 
 Python 側は `uv sync` で editable install 含めて完結。
 
-**Debug 戦略**: mod は Resonite (host プロセス) に in-process でロードされるため、container 内から直接 attach する経路はない。Step 2 までは `ResoniteIOPlugin.Log` (BepInEx `ManualLogSource`) からの **print-debug + `just log` でのログ tailing** を主経路とする。`deploy-mod` で PDB も配置済みのため、Step 3 以降で必要になったら host IDE (Rider / VSCode C# Dev Kit) から Resonite プロセスに .NET debugger を attach できる。
+**Debug 戦略**: mod は Resonite (host プロセス) に in-process でロードされるため、container 内から直接 attach する経路はない。Step 3 までは `ResoniteIOPlugin.Log` (BepInEx `ManualLogSource`) からの **print-debug + `just log` でのログ tailing** に加え、**container ↔ host Resonite bridge** (`scripts/host_agent.py` + `scripts/resonite_cli.py`、`just resonite-{start,stop,status}`) を二本目の debug 経路として整備済み。Step 2-3 はこの 2 系統で十分間に合ったため、`deploy-mod` 時に同梱される PDB を使う .NET debugger attach (host IDE → Resonite プロセス) は Step 4 以降で必要になった時に整備する。
 
 将来: BepisLoader の .NET Hot Reload (debugger attach 時)。
 
@@ -276,7 +287,7 @@ ______________________________________________________________________
 - ✅ **C# Mod SDK**: `Microsoft.NET.Sdk` + BepisLoader 公式 Template の NuGet 群 (`BepInEx.ResonitePluginInfoProps` / `ResoniteModding.BepInExResoniteShim` / `ResoniteModding.BepisResoniteWrapper`)。当初検討した `Remora.Resonite.Sdk` は不採用
 - ✅ **C# 側 proto 生成**: `Grpc.Tools` の `<Protobuf>` ItemGroup で `dotnet build` 時に自動生成 (Server スタブのみ)。`gen_proto.sh` は Python 側のみを扱う
 - ✅ **dotnet local tools** (`.config/dotnet-tools.json`): `csharpier` / `tcli` / `ilspycmd`。global tool + PATH 操作は採らない
-- ✅ **proto lint**: `buf` (`buf.yaml`、`SERVICE_SUFFIX` は除外)
+- ✅ **proto lint**: `buf` (`buf.yaml`、`SERVICE_SUFFIX` + `RPC_REQUEST_STANDARD_NAME` + `RPC_RESPONSE_STANDARD_NAME` を except)。message 型は `CameraFrame` のようなモダリティ固有ドメイン名で命名する規約 (Step 3 で確立、根拠は `.claude/agent-memory/spec-driven-implementer/feedback_proto_rpc_naming_except.md`)
 - ✅ **mod deploy**: csproj の PostBuild Target が `$(ResonitePath)/BepInEx/plugins/ResoniteIO/` に Copy する一本化。`scripts/deploy_mod.sh` は廃止
 - ✅ **mod 配布**: Thunderstore zip を `dotnet build -t:PackTS` (`tcli` ラップ) で生成
 - ✅ **proto スキーマは Step ごとに incremental に詰める** (Step 1 で `session.proto`、Step 3 で `camera.proto`、…)
@@ -285,7 +296,11 @@ ______________________________________________________________________
 - ✅ **C# は二層構成**: `ResoniteIO.Core` (pure library) と `ResoniteIO` (BepInEx mod アダプタ)。Mod は Core を `ProjectReference` し、Bridge インターフェイス経由で engine 依存処理を注入する
 - ✅ **C# proto 生成は Core 側に集約**。`<Protobuf GrpcServices="Server" />` は `ResoniteIO.Core.csproj` に置く。Mod 側 csproj は Core への ProjectReference のみで proto 直接参照は持たない
 - ✅ **C# gRPC server**: `Grpc.AspNetCore.Server` (Kestrel + UDS) を Core 側で使用、`WebApplication.CreateSlimBuilder()` で最小構成 (Reflection 等のオマケは含めない)
-- ✅ **UDS socket path**: host と container で `/run/user/${HOST_UID}/resonite-io/` を同一絶対パスで rw bind 共有 (`docker-compose.yml` long-form bind + container 側 `XDG_RUNTIME_DIR` env)。socket ファイル名は mod が `resonite-{pid}.sock` を採用し、1 host 上で複数 Resonite が共存可能。Python client は `RESONITE_IO_SOCKET` (フルパス) → `RESONITE_IO_SOCKET_DIR` → 既定 `$XDG_RUNTIME_DIR/resonite-io/` の順で解決し、ディレクトリ探索時は 1 個なら自動採用 / 複数なら明示指定を要求。host 側ディレクトリは `just container-up` が 0700 で先に作成 (`create_host_path: false` で fail-fast)。
+- ✅ **UDS socket path**: host と container で **`$HOME/.resonite-io/`** を同一絶対パスで rw bind 共有 (`docker-compose.yml` long-form bind + `${HOST_HOME}` を justfile が `env_var('HOME')` から動的注入。container 側 username は `dev` 固定だが host の `~` と同じ inode に到達)。`$XDG_RUNTIME_DIR/resonite-io/` を当初想定したが pressure-vessel (Steam Linux Runtime) が `/run/user/<UID>` を sandbox tmpfs で覆うため不採用 (詳細: `.claude/memory/reference_pressure_vessel_paths.md`)。socket ファイル名は mod が `resonite-{Process.Id}.sock` を採用し、1 host 上で複数 Resonite が共存可能。Python client は `RESONITE_IO_SOCKET` (フルパス) → `RESONITE_IO_SOCKET_DIR` → 既定 `$HOME/.resonite-io/` の順で解決し、ディレクトリ探索時は 1 個なら自動採用 / 複数なら明示指定を要求。host 側ディレクトリは `just container-up` が `~/.resonite-io{,-debug}/` を 0700 で先に作成 (`create_host_path: false` で fail-fast)。
+- ✅ **AspNetCore shared framework の同梱**: Kestrel が要求する `Microsoft.AspNetCore.*` は framework reference のため、`CopyLocalLockFileAssemblies=true` でも bin/ に出ない。`ResoniteIO.csproj` の `CopyAspNetCoreSharedFrameworkRuntime` Target で `$(NetCoreRoot)shared/Microsoft.AspNetCore.App/$(BundledNETCoreAppPackageVersion)/*.dll` を TargetDir にコピーし、PostBuild の PluginFiles glob で gale 配下に同梱する (Step 2 Phase 4 で実機検証済み)。`Microsoft.NETCore.App` は Resonite ランタイムが既に持っているため include 不要。
+- ✅ **Resonite 同梱 DLL との version skew 対策**: `mod/src/ResoniteIO/Loading/PluginAssemblyResolver.cs` が plugin folder を優先する resolver を attach し、Resonite 同梱の旧 `Google.Protobuf` より Core 同梱版を解決させる。Plugin.Load では resolver 接続前に Core 型を絶対触らない (触ると旧 Protobuf 解決で `TypeLoadException: Could not load type 'Google.Protobuf.IBufferMessage'`)。
+- ✅ **Container ↔ Host Resonite debug bridge**: Step 2 で `scripts/host_agent.py` + `scripts/resonite_cli.py` を追加。本番 IPC とは分離した `$HOME/.resonite-io-debug/host-agent.sock` を使う。kill 範囲は `Resonite.exe` / `Renderite.Renderer.exe` の名前ベース pkill のみ (Proton / pressure-vessel / Steam reaper には触らない)。GUI session 必須 (gale は `--no-gui` でもディスプレイを要求するため SSH only セッションでは fail-fast)。
+- ✅ **gRPC tools の重複型警告 (CS0436) 対策**: Core で Server stub、テスト csproj で Client stub を別生成すると同一 namespace に message 型が重複する。テスト csproj 限定で `<NoWarn>$(NoWarn);CS0436</NoWarn>` を入れる (mod 側は Core を ProjectReference するだけで proto 直参照しない方針なので mod 側は対象外)。
 - ✅ **テスト戦略の二層化**:
   - Core 単体: Kestrel ラウンドトリップ含む統合テストを xunit で (Resonite 不要)
   - Mod adapter: BepInEx 依存があるため smoke test のみ
@@ -303,27 +318,32 @@ ______________________________________________________________________
 - [x] `proto/resonite_io/v1/session.proto` (Ping RPC) を追加
 - [x] xunit smoke test (`mod/tests/ResoniteIO.Tests/`) + pytest scaffolding (`python/tests/resoio/`)
 - [x] モダリティ別ディレクトリの `.gitkeep` を C# / Python 両側に配置 (Camera / Audio / Locomotion / Manipulation / Session)
-- [ ] `Engine.Current.WorldManager.FocusedWorld` から `LocalUser` を引いて Console にログ出力 (Step 2 と合わせて実装する)
+- [x] `Engine.Current.WorldManager.FocusedWorld` から `LocalUser` を引いて Console にログ出力 → **Step 2 で `FrooxEngineSessionBridge` 経由で実装済み**
 
-### Step 2: gRPC Session — **次に着手**
+### Step 2: gRPC Session — **完了**
 
 各 Step は Core/Mod 二層構成を前提に分割する (§設計レイヤー / §5 決定事項)。
 
-- **Core** (`ResoniteIO.Core`): プロジェクト新設、`Grpc.AspNetCore.Server` + `<Protobuf>` を Core 側に集約、`SessionService` (Ping echo + Unix nanos) と `SessionHost` (Kestrel + UDS lifecycle: `$XDG_RUNTIME_DIR/resonite-io/` を `0700` で `mkdir`、`resonite-{Process.GetCurrentProcess().Id}.sock` で bind、起動時に stale socket を `File.Delete`、`AppDomain.ProcessExit` で best-effort `unlink`) を実装。Kestrel ラウンドトリップで xunit 統合テスト (Resonite 不要)
-- **Mod** (`ResoniteIO`): `ResoniteIOPlugin` から `SessionHost` を起動、`ISessionBridge` を FrooxEngine 実装 (`FrooxEngineSessionBridge`) で注入、Step 1 宿題である `FocusedWorld` / `LocalUser` のログ出力を Bridge 経由で実現、`AppDomain.ProcessExit` / `Engine.OnShutdown` で graceful stop
-- **Python** (`resoio`): `SessionClient` (async context manager) と in-process server (`SessionBase` 継承の echo 実装) を tmp_path UDS で繋ぐ round-trip テスト
+- [x] **Core** (`ResoniteIO.Core`): プロジェクト新設、`Grpc.AspNetCore.Server` + `<Protobuf>` を Core 側に集約、`SessionService` (Ping echo + Unix nanos) と `SessionHost` (Kestrel + UDS lifecycle: `~/.resonite-io/` を `0700` で `mkdir`、`resonite-{Process.GetCurrentProcess().Id}.sock` で bind、起動時に stale socket を `File.Delete`、`AppDomain.ProcessExit` で best-effort `unlink`) を実装。Kestrel ラウンドトリップで xunit 統合テスト済 (Resonite 不要)
+- [x] **Mod** (`ResoniteIO`): `ResoniteIOPlugin` から `SessionHost` を起動、`ISessionBridge` を FrooxEngine 実装 (`FrooxEngineSessionBridge`) で注入、`FocusedWorld` / `LocalUser` を Bridge 経由で露出 (proto は変更せず Plugin 側のログ出力に留めた判断: `.claude/memory/feedback_session_bridge_no_proto_change.md`)、`PluginAssemblyResolver` で Google.Protobuf version skew を回避、`AppDomain.ProcessExit` で best-effort graceful stop (`Engine.OnShutdown` 経路は次以降に先送り: `.claude/agent-memory/spec-driven-implementer/feedback_engine_onshutdown_deferred.md`)
+- [x] **Python** (`resoio`): `SessionClient` (async context manager) と in-process server を tmp_path UDS で繋ぐ round-trip テスト、`_socket.py` に socket 探索ロジック (`RESONITE_IO_SOCKET` → `RESONITE_IO_SOCKET_DIR` → `~/.resonite-io/`)、`SocketNotFoundError` / `AmbiguousSocketError` を公開
+- [x] **付随**: pressure-vessel 起因で UDS path を `~/.resonite-io/` に変更、container ↔ host Resonite debug bridge (`scripts/host_agent.py` + `scripts/resonite_cli.py`) を導入
 
-### Step 3: Camera モジュール
+### Step 3: Camera モジュール — **完了**
 
-- **Core**: `CameraService` (server-streaming RGB frame) と `ICameraBridge` 定義、フレーム供給はタイムスタンプ付き
-- **Mod**: `FrooxEngineCameraBridge` でエージェント頭部 Slot に `Camera` コンポーネント生成、`RenderTextureProvider` から byte\[\] を取り出す
-- **Python**: `CameraClient` で server-stream を受信し、`cv2.imshow` で目視確認 ← **最初の難関**
+- [x] **proto** (`proto/resonite_io/v1/camera.proto`): `Camera.StreamFrames` (server-streaming) RPC。message 名はドメイン名 (`CameraFrame`, `CameraStreamRequest`) で命名し `RPC_REQUEST/RESPONSE_STANDARD_NAME` を except (規約: `.claude/agent-memory/spec-driven-implementer/feedback_proto_rpc_naming_except.md`)
+- [x] **Core** (`ResoniteIO.Core.Camera`): `CameraService` 実装。`ICameraBridge` は optional DI で `null` なら `Status.Unavailable`、`CameraNotReadyException` は `FailedPrecondition` に翻訳。`fps_limit` で pacing (理論値 +2 のスラックで tolerance テスト、根拠: `.claude/agent-memory/spec-driven-implementer/feedback_streaming_fps_limit_test_tolerance.md`)。Fake Bridge による in-process streaming テスト済 (Resonite 不要)
+- [x] **Mod** (`ResoniteIO.Bridge`): `FrooxEngineCameraBridge` でエージェント頭部 Slot に `Camera` コンポーネント生成 + `RenderTextureProvider` 読出。component graph 変更は `World.RunSynchronously` + `TaskCompletionSource` で engine tick 上にディスパッチ (パターン: `.claude/agent-memory/spec-driven-implementer/feedback_bridge_engine_thread_dispatch.md`)。BGRA8 でなく **RGBA8** で readback (commit `5129bb6` で青被り解消)
+- [x] **Python** (`resoio.camera`): `CameraClient` で server-stream を受信、numpy ndarray として yield。`tests/e2e/camera_stream.py` で MP4 dump (`e2e_artifacts/`、30fps) まで実施
+- [x] **AspNetCore shared framework deploy 問題の解決**: §5 決定事項参照 (`CopyAspNetCoreSharedFrameworkRuntime` Target で SDK shared framework から DLL コピー)
 
-### Step 4: Locomotion モジュール
+### Step 4: Locomotion モジュール — **次に着手**
 
-- **Core**: `LocomotionService` (client-streaming Pose 更新) と `ILocomotionBridge` 定義
-- **Mod**: `FrooxEngineLocomotionBridge` で `LocalUser.Root` の Position/Rotation を engine update tick 上で設定
+- **proto**: `proto/resonite_io/v1/locomotion.proto` で `Locomotion` service (client-stream Pose 更新)。message は `PoseSample` 等のドメイン名で命名 (Step 3 規約を踏襲)
+- **Core**: `LocomotionService` (client-streaming Pose) と `ILocomotionBridge` 定義
+- **Mod**: `FrooxEngineLocomotionBridge` で `LocalUser.Root` の Position / Rotation を engine update tick 上で設定 (Bridge engine-thread dispatch パターンを再利用)
 - **Python**: `LocomotionClient` から制御して動くことを確認
+- **付随**: 必要なら `Engine.OnShutdown` 系 hook の調査 (現状先送り中)
 
 ### Step 5: Manipulation モジュール
 
@@ -344,14 +364,20 @@ ______________________________________________________________________
 
 ## 7. リスク・未解決事項
 
-- **Renderite IPC のドキュメント不足**: Camera readback の実装は decompile 読みが前提
-- **Audio 取得経路が未調査**: FrooxEngine 側でユーザーが聞いている音声を取得する API があるか要調査 (なければ Renderite 側のフックが必要かも)
-- **ライセンス・ToS**: Resonite は明示的な研究用 bot 規定なし。慣習的には黙認〜歓迎
-- **マルチエージェント**: スコープ外だが、将来は 1 Resonite インスタンス = 1 エージェントのコスト問題が出てくる
-- **Kestrel が引き連れる依存と Resonite 同梱 DLL の version skew**: `Grpc.AspNetCore.Server` は `Microsoft.AspNetCore.*` / `Microsoft.Extensions.*` / `System.IO.Pipelines` を芋づる式に持ち込む。Core に閉じ込めても mod ロード時に同一 AppDomain で Resonite 同梱バージョンと衝突しうる。Step 2 着手時に `just decompile` で Resonite 同梱バージョンを確認し `.claude/memory/` に記録する。`PrivateAssets="all"` / `Private="False"` の慎重な設定が必要
-- **UDS socket の host ↔ container 共有**: `/run/user/${HOST_UID}/resonite-io/` を両側同一絶対パスで rw bind し、`HOST_UID` 一致 (justfile が `id -u` から注入) で perms を揃える。host 側ディレクトリは `just container-up` が 0700 で事前作成 (Docker 任せだと root 所有になる)。`$XDG_RUNTIME_DIR` 未設定環境 (非 systemd-logind セッション) では fail-fast し、`/tmp` fallback は当面持たない。stale socket は SessionHost が bind 直前に `File.Delete` で除去 (PID 一致や mtime チェックは Step 2 ではやらず、`unlink` 前提で十分)。SIGKILL 等で `unlink` を逃した socket も次回起動時に上書き除去される。マルチユーザー環境では `HOST_UID` 名前空間で自然に分離される。
-- **Bridge インターフェイスの粒度**: モダリティが増えるにつれ IF が肥大化する懸念。各モダリティで独立 IF (`ISessionBridge`, `ICameraBridge`, …) として分割する方針 (§2 採用方針)
-- **`BasePlugin` に Unload 相当が無い**: BepInEx 6 の `BasePlugin` には mod 終了時 hook が無い。`Engine.OnShutdown` 系 API の有無を Step 2 着手時に decompile で確認し、無ければ `AppDomain.ProcessExit` で best-effort 停止する (SIGKILL されたら socket file は残る)
+### 解決済み (Step 2-3 で対処)
+
+- ✅ **Renderite IPC のドキュメント不足**: Camera readback については `decompiled/` を読みながら Step 3 で実装完了。`Camera.RenderToBitmap` 経由で安全に readback できることが確認できた。BGRA8 → RGBA8 の色順問題に時間を取られた (commit `5129bb6`)。他モダリティで Renderite IPC 知見が必要になったら同じく decompile を読みつつ進める。
+- ✅ **Kestrel が引き連れる依存と Resonite 同梱 DLL の version skew**: `Grpc.AspNetCore.Server` の transitive 群 (`Microsoft.AspNetCore.*` / `Microsoft.Extensions.*` / `System.IO.Pipelines`) は §5 の "AspNetCore shared framework の同梱" 方針で解決。Resonite 同梱の **旧 Google.Protobuf** との衝突は `PluginAssemblyResolver` で plugin folder を優先解決させる方針で解決 (`mod/src/ResoniteIO/Loading/`)。Plugin.Load 内で resolver attach 以前に Core 型を触ってはならないという制約が残る (詳細: `.claude/agent-memory/docstring-author/project_load_bearing_whys.md`)。
+- ✅ **UDS socket の host ↔ container 共有**: pressure-vessel が `/run/user/<UID>` を sandbox tmpfs で覆うため、**`$HOME/.resonite-io/` ベースに変更**して解決 (§5 決定事項参照)。stale socket は SessionHost が bind 直前に `File.Delete` で除去する `unlink` 前提運用で十分機能している。
+
+### 継続観察
+
+- **Audio 取得経路が未調査**: FrooxEngine 側でユーザーが聞いている音声を取得する API があるか要調査 (なければ Renderite 側のフックが必要かも)。Step 6 着手時に decompile + 実機検証で確認する。
+- **ライセンス・ToS**: Resonite は明示的な研究用 bot 規定なし。慣習的には黙認〜歓迎。商用化や派手な公開実験を始める前にユーザーに確認する。
+- **マルチエージェント**: スコープ外だが、将来は 1 Resonite インスタンス = 1 エージェントのコスト問題が出てくる。
+- **Bridge インターフェイスの粒度**: モダリティが増えるにつれ IF が肥大化する懸念。各モダリティで独立 IF (`ISessionBridge`, `ICameraBridge`, …) として分割する方針 (§2 採用方針)。Step 3 完了時点で 2 IF (Session / Camera) のため肥大化はまだ起きていない。
+- **`BasePlugin` に Unload 相当が無い**: BepInEx 6 の `BasePlugin` には mod 終了時 hook が無い。Step 2 で `AppDomain.ProcessExit` 経由の best-effort 停止を採用し、Step 3 でも `Engine.OnShutdown` 経路の調査は先送り継続中 (Camera 実装スケジュール優先、`FrooxEngineCameraBridge` も engine shutdown 後の `RunSynchronously` 例外を飲んで best-effort 設計にしている)。Step 4 以降で graceful shutdown 不整合に当たったら decompile 調査を再開する (`.claude/agent-memory/spec-driven-implementer/feedback_engine_onshutdown_deferred.md`)。
+- **Bridge での engine-thread dispatch コスト**: Step 3 で `World.RunSynchronously` + `TaskCompletionSource` パターンを確立したが、毎フレームの component graph 変更が必要なモダリティ (Locomotion で `Root` を毎 tick 動かす等) では engine tick 上のコストが線形に積み上がる。Step 4 実機検証で profiling し、必要なら一括化 (`UpdateOrder` 経由の per-tick callback 等) を検討する。
 
 ______________________________________________________________________
 
