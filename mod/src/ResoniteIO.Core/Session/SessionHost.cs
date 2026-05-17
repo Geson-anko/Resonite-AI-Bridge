@@ -5,6 +5,7 @@ using Microsoft.AspNetCore.Server.Kestrel.Core;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using ResoniteIO.Core.Bridge;
+using ResoniteIO.Core.Camera;
 using ResoniteIO.Core.Logging;
 
 namespace ResoniteIO.Core.Session;
@@ -52,14 +53,16 @@ public sealed class SessionHost : IAsyncDisposable
 
     /// <summary>
     /// Kestrel の listen 完了を同期的に待ってから返す。停止は dispose または
-    /// <paramref name="cancellationToken"/> 経由。<paramref name="bridge"/> は省略
-    /// 可能 (Core 単体テスト用)。<see cref="InvalidOperationException"/> は socket path を
+    /// <paramref name="cancellationToken"/> 経由。<paramref name="bridge"/> /
+    /// <paramref name="cameraBridge"/> は省略可能 (Core 単体テスト・モダリティが
+    /// 提供されない構成用)。<see cref="InvalidOperationException"/> は socket path を
     /// 解決できなかった場合 (<c>HOME</c> 未設定環境)。
     /// </summary>
     public static SessionHost Start(
         ILogSink log,
         CancellationToken cancellationToken,
-        ISessionBridge? bridge = null
+        ISessionBridge? bridge = null,
+        ICameraBridge? cameraBridge = null
     )
     {
         ArgumentNullException.ThrowIfNull(log);
@@ -75,11 +78,22 @@ public sealed class SessionHost : IAsyncDisposable
         TryUnlink(socketPath);
 
         var builder = WebApplication.CreateSlimBuilder();
-        builder.Services.AddGrpc();
+        // Camera は任意解像度の BGRA8 raw を流す (4K×4K で 64MB クラス)。proto レベルでは
+        // 上限を設けず gRPC channel 設定を緩めて運用する (Plan §1 Proto schema)。
+        // int.MaxValue を渡すと Grpc.AspNetCore.Server は "上限相当の最大値" として扱う。
+        builder.Services.AddGrpc(o =>
+        {
+            o.MaxReceiveMessageSize = int.MaxValue;
+            o.MaxSendMessageSize = int.MaxValue;
+        });
         builder.Services.AddSingleton(log);
         if (bridge is not null)
         {
             builder.Services.AddSingleton(bridge);
+        }
+        if (cameraBridge is not null)
+        {
+            builder.Services.AddSingleton(cameraBridge);
         }
         builder.WebHost.ConfigureKestrel(opts =>
         {
@@ -91,6 +105,7 @@ public sealed class SessionHost : IAsyncDisposable
 
         var app = builder.Build();
         app.MapGrpcService<SessionService>();
+        app.MapGrpcService<CameraService>();
 
         EventHandler processExitHandler = (_, _) => TryUnlink(socketPath);
         AppDomain.CurrentDomain.ProcessExit += processExitHandler;
