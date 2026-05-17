@@ -1,41 +1,35 @@
 // Camera service: ユーザー画面相当の映像を server-streaming で配信する。
 //
-// `StreamFrames` は要求された解像度の RGBA8 raw フレームを連続送信する。
-// 座標規約は ResoniteIO 全体の固定 API: row 0 = top-left, RGBA byte order。
-// `flip_y` のような向き指定フィールドはあえて持たず、サーバ側で常に top-down に
-// 正規化して送る (下流コードでの mental cost を減らすため)。
+// 向きは常に top-left origin (row 0 = 画像上端) に正規化して送る。`flip_y` の
+// ような向き指定フィールドは持たない (下流コードでの mental cost を減らすため)。
 //
-// RGBA を採用するのは Unity の TextureFormat.RGBA32 が R, G, B, A の byte 順で
-// `GetRawTextureData` を返す仕様と、numpy / PIL / OpenGL 等のモダン画像処理ライブラリの
-// 標準に揃えるため (BGRA は Windows D3D legacy, ARGB は古い Mac/Java legacy)。
+// RGBA8 を選んでいるのは numpy / PIL / OpenGL 等のモダン画像処理ライブラリと
+// Unity の `TextureFormat.RGBA32` の byte 順 (R, G, B, A) に揃えるため
+// (BGRA は Windows D3D legacy、ARGB は古い Mac/Java legacy)。
 //
-// pixels サイズ上限は proto レベルでは設けず、Channel 設定 (max message size) を
-// 緩めることで運用する。4K (4096*4096*4 = 64MB) のような巨大フレームは
-// ユーザー責任で要求する想定。
+// 巨大フレーム (4K で 64MB クラス) は proto では上限を設けず gRPC channel の
+// max message size 設定で吸収する。
 syntax = "proto3";
 
 package resonite_io.v1;
 
 option csharp_namespace = "ResoniteIO.V1";
 
-// CameraStreamRequest はストリーム開始時に解像度と fps 上限を指定する。
-// width/height が 0 以下のときはサーバ既定 (640x480) を使う。
-// fps_limit が 0 以下のときは pacing 無し (ベストエフォートのネイティブ fps)。
+// width/height が 0 以下のときはサーバ既定 (640x480)、fps_limit が 0 以下のときは
+// pacing 無し (best-effort native fps)。
 message CameraStreamRequest {
   int32 width = 1;
   int32 height = 2;
   float fps_limit = 3;
 }
 
-// CameraFrameFormat は pixels の byte 配置を識別する。
 enum CameraFrameFormat {
   CAMERA_FRAME_FORMAT_UNSPECIFIED = 0;
-  // RGBA8: 1 ピクセル 4 byte (R, G, B, A の順)、row 0 = 画像上端 (top-left origin)。
+  // 1 ピクセル 4 byte (R, G, B, A の順)、row 0 = 画像上端 (top-left origin)。
   CAMERA_FRAME_FORMAT_RGBA8 = 1;
 }
 
-// CameraFrame は 1 フレーム分の raw pixel と metadata。
-// pixels の長さは必ず width * height * 4 (RGBA8 時)。
+// pixels の長さは RGBA8 時 width * height * 4。
 message CameraFrame {
   int32 width = 1;
   int32 height = 2;
@@ -45,7 +39,6 @@ message CameraFrame {
   bytes pixels = 6;
 }
 
-// Camera は映像モダリティの中心サービス。
 service Camera {
   rpc StreamFrames(CameraStreamRequest) returns (stream CameraFrame);
 }

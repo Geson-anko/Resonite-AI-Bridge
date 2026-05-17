@@ -10,8 +10,8 @@ namespace ResoniteIO.Core.Camera;
 
 /// <summary><c>resonite_io.v1.Camera</c> サービスの Core 実装。</summary>
 /// <remarks>
-/// <see cref="ICameraBridge"/> は optional DI。null の場合 (例: Core 単体テストで bridge
-/// 未注入、または engine が camera を提供しない構成) は <c>Status.Unavailable</c> を返す。
+/// <see cref="ICameraBridge"/> は optional DI。null なら <c>Status.Unavailable</c> を返す
+/// (Core 単体テストや camera 非対応 engine 構成を成立させるため)。
 /// </remarks>
 public sealed class CameraService : V1.Camera.CameraBase
 {
@@ -31,23 +31,11 @@ public sealed class CameraService : V1.Camera.CameraBase
     /// Bridge から 1 フレームずつ取り出して proto に詰めて流す server-streaming RPC。
     /// </summary>
     /// <remarks>
-    /// <para>
-    /// 解像度は <c>request.Width</c>/<c>Height</c> が 0 以下のとき
-    /// <see cref="DefaultWidth"/> × <see cref="DefaultHeight"/> (640×480) を採用する。
-    /// <c>fps_limit</c> が 0 以下なら pacing 無し (Bridge が返せる最速)、それ以上なら
-    /// 1 フレーム周期 = <c>1/fps_limit</c> 秒で sleep する best-effort pacing。
-    /// </para>
-    /// <para>
-    /// 例外翻訳: <see cref="ICameraBridge"/> 未注入は <c>Unavailable</c>、
-    /// <see cref="CameraNotReadyException"/> は <c>FailedPrecondition</c>、その他の Bridge
-    /// 例外は <c>Internal</c>。<c>FailedPrecondition</c> はクライアントが時間を置いて
-    /// 再 stream する想定 (LocalUser や world が ready 待ちのとき発生する)。
-    /// </para>
-    /// <para>
-    /// <c>frame_id</c> は本 service の monotonic counter で 0 から振り直す
-    /// (Bridge 側 ID とは独立)。client は同一 stream 内のフレームを抜けや並び替え無しに
-    /// 識別できる。
-    /// </para>
+    /// width/height が 0 以下なら 640×480、<c>fps_limit</c> が 0 以下なら pacing 無し。
+    /// 例外翻訳: bridge 未注入 → <c>Unavailable</c>、<see cref="CameraNotReadyException"/>
+    /// → <c>FailedPrecondition</c> (client は時間を置いて再 stream)、それ以外 →
+    /// <c>Internal</c>。<c>frame_id</c> は service 側で 0 から振り直す monotonic counter
+    /// で Bridge 側 ID とは独立。
     /// </remarks>
     public override async Task StreamFrames(
         V1.CameraStreamRequest request,
@@ -153,12 +141,9 @@ public sealed class CameraService : V1.Camera.CameraBase
             Height = frame.Height,
             Format = ToProtoFormat(frame.Format),
             UnixNanos = frame.UnixNanos,
-            // service 側で monotonic に振る (Bridge 側 FrameId とは独立)。
             FrameId = protoFrameId,
-            // Bridge から渡された byte[] は per-capture で新規確保される契約だが、
-            // 防衛的に CopyFrom で defensive copy する (proto 側保持期間と Bridge buffer
-            // 寿命を独立させるため)。64MB クラスのフレームで perf 問題化したら
-            // UnsafeByteOperations.UnsafeWrap への切替を検討する。
+            // Defensive copy で proto 側保持期間を Bridge buffer 寿命と切り離す。
+            // 64MB クラスのフレームで perf 問題化したら UnsafeByteOperations.UnsafeWrap へ。
             Pixels = ByteString.CopyFrom(frame.Pixels),
         };
     }

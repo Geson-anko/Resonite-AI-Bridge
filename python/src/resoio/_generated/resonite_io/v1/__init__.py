@@ -35,15 +35,11 @@ betterproto2.check_compiler_version(_COMPILER_VERSION)
 
 
 class CameraFrameFormat(betterproto2.Enum):
-    """
-    CameraFrameFormat は pixels の byte 配置を識別する。
-    """
-
     UNSPECIFIED = 0
 
     RGBA8 = 1
     """
-    RGBA8: 1 ピクセル 4 byte (R, G, B, A の順)、row 0 = 画像上端 (top-left origin)。
+    1 ピクセル 4 byte (R, G, B, A の順)、row 0 = 画像上端 (top-left origin)。
     """
 
     @classmethod
@@ -64,8 +60,7 @@ class CameraFrameFormat(betterproto2.Enum):
 @dataclass(eq=False, repr=False)
 class CameraFrame(betterproto2.Message):
     """
-    CameraFrame は 1 フレーム分の raw pixel と metadata。
-    pixels の長さは必ず width * height * 4 (RGBA8 時)。
+    pixels の長さは RGBA8 時 width * height * 4。
     """
 
     width: "int" = betterproto2.field(1, betterproto2.TYPE_INT32)
@@ -89,9 +84,8 @@ default_message_pool.register_message("resonite_io.v1", "CameraFrame", CameraFra
 @dataclass(eq=False, repr=False)
 class CameraStreamRequest(betterproto2.Message):
     """
-    CameraStreamRequest はストリーム開始時に解像度と fps 上限を指定する。
-    width/height が 0 以下のときはサーバ既定 (640x480) を使う。
-    fps_limit が 0 以下のときは pacing 無し (ベストエフォートのネイティブ fps)。
+    width/height が 0 以下のときはサーバ既定 (640x480)、fps_limit が 0 以下のときは
+    pacing 無し (best-effort native fps)。
     """
 
     width: "int" = betterproto2.field(1, betterproto2.TYPE_INT32)
@@ -135,10 +129,6 @@ default_message_pool.register_message("resonite_io.v1", "PingResponse", PingResp
 
 
 class CameraStub(betterproto2_grpclib.ServiceStub):
-    """
-    Camera は映像モダリティの中心サービス。
-    """
-
     async def stream_frames(
         self,
         message: "CameraStreamRequest",
@@ -184,10 +174,6 @@ class SessionStub(betterproto2_grpclib.ServiceStub):
 
 
 class CameraBase(betterproto2_grpclib.ServiceBase):
-    """
-    Camera は映像モダリティの中心サービス。
-    """
-
     async def stream_frames(
         self, message: "CameraStreamRequest"
     ) -> "AsyncIterator[CameraFrame]":

@@ -14,20 +14,15 @@ from resoio._generated.resonite_io.v1 import (
 )
 from resoio.camera import CameraClient, Frame
 
-# Sentinel default the in-process fake uses when the client asks for 0 — keeps
-# the Echo behaviour explicit and lets us assert the resolved value clearly.
+# Sentinel default the fake substitutes when the client asks for 0; lets the
+# default-resolution test assert the resolved value explicitly.
 _DEFAULT_W = 32
 _DEFAULT_H = 24
 _FRAME_COUNT = 3
 
 
 class _EchoCamera(CameraBase):
-    """In-process fake that yields ``_FRAME_COUNT`` synthetic RGBA8 frames.
-
-    A request with width/height == 0 falls back to (_DEFAULT_W,
-    _DEFAULT_H) so we can verify the client tolerates the "server-
-    default" path without crashing on an empty reshape.
-    """
+    """In-process fake yielding ``_FRAME_COUNT`` synthetic RGBA8 frames."""
 
     async def stream_frames(
         self, message: CameraStreamRequest

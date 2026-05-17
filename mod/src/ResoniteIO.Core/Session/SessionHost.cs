@@ -64,11 +64,10 @@ public sealed class SessionHost : IAsyncDisposable
     /// <paramref name="cancellationToken"/> 経由。
     /// </summary>
     /// <remarks>
-    /// Bridge 引数は全て optional: Step 2 (Session のみ) や Core 単体テストとの後方互換、
-    /// および「特定モダリティを提供しない構成 (例: camera 無し headless)」を成立させる。
+    /// Bridge 引数は全て optional (モダリティ未提供構成や Core 単体テストとの両立)。
     /// null Bridge を持つ Service は呼ばれた時点で <c>Unavailable</c> を返す。
-    /// <see cref="InvalidOperationException"/> は socket path を解決できなかった場合
-    /// (<c>HOME</c> 未設定環境)。
+    /// socket path を解決できない場合 (<c>HOME</c> 未設定等) は
+    /// <see cref="InvalidOperationException"/>。
     /// </remarks>
     public static SessionHost Start(
         ILogSink log,
@@ -90,9 +89,8 @@ public sealed class SessionHost : IAsyncDisposable
         TryUnlink(socketPath);
 
         var builder = WebApplication.CreateSlimBuilder();
-        // Camera は任意解像度の RGBA8 raw を流す (4K×4K で 64MB クラス)。proto レベルでは
-        // 上限を設けず gRPC channel 設定を緩めて運用する (Plan §1 Proto schema)。
-        // int.MaxValue を渡すと Grpc.AspNetCore.Server は "上限相当の最大値" として扱う。
+        // Camera が 4K で 64MB クラスの RGBA8 raw フレームを流すため上限を外す
+        // (proto 側では上限を設けない方針 — Plan §1)。
         builder.Services.AddGrpc(o =>
         {
             o.MaxReceiveMessageSize = int.MaxValue;

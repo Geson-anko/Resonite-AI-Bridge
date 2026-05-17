@@ -1,19 +1,15 @@
 """E2E: stream Camera frames from a live Resonite and record to MP4.
 
-Captures ~10 seconds of frames at 640x480 @ 30 fps through ``CameraClient``
-and writes them to ``e2e_artifacts/camera_<timestamp>/capture.mp4`` using
-OpenCV. The first and last frame are also saved as PNG for quick visual
-inspection without needing a video player.
+The first and last frame are also dumped as PNG so the artifact can be
+sanity-checked without a video player.
 
-ResoniteIO の Camera API は RGBA8 raw を返す (row 0 = 上端)。MP4 / H.264 は
-alpha 非対応なので cv2.cvtColor(RGBA2BGR) で alpha を落として 3-channel BGR と
-して書く。alpha 込みで保存したい場合は MOV (例えば PNG codec) や個別 PNG dump
-を使う必要があるが、本テストは「ユーザー画面が正しく映っているか」の visual
-verification 目的なので alpha drop で十分。
+MP4 / H.264 は alpha 非対応のため ``cv2.cvtColor(RGBA2BGR)`` で alpha を落として
+3-channel BGR で書く (visual verification 目的なので alpha drop で十分。alpha
+込みで保存したい場合は MOV + PNG codec や個別 PNG dump が必要)。
 
-Like every file under ``tests/e2e/`` the actual run requires the host-side
-``just host-agent`` daemon plus a live Resonite client; without them the
-``require_host_agent`` autouse fixture skips the test.
+Like every file under ``tests/e2e/`` this requires the host-side
+``just host-agent`` daemon plus a live Resonite client; the
+``require_host_agent`` autouse fixture skips otherwise.
 """
 
 from __future__ import annotations
@@ -34,18 +30,17 @@ from tests.helpers import mark_e2e
 
 ARTIFACT_ROOT = Path(__file__).parent / "e2e_artifacts"
 
-# 10 s × 30 fps = 300 frames nominal. RenderToBitmap が重 world で 30fps を
-# 維持できない可能性を考慮し、最低 200 frames (= 実効 20fps) で OK とする。
+# 公称 10 s × 30 fps = 300 frames。重 world で fps を割る可能性を見込み下限を
+# 実効 20fps 相当 (200 frames) に緩める。
 _CAPTURE_WIDTH = 640
 _CAPTURE_HEIGHT = 480
 _CAPTURE_FPS = 30.0
 _CAPTURE_SECONDS = 10.0
 _MIN_FRAMES = 200
 
-# Resonite finishes engine bootstrap (UDS socket bind) before LocalUser/
-# focused world is ready. The bridge raises CameraNotReadyException →
-# FailedPrecondition during this window; client retries until a world is
-# loaded (matches the documented "client は再 stream で retry" contract).
+# UDS bind と LocalUser/FocusedWorld 準備の間に gap があり、その間 Camera Bridge
+# は FAILED_PRECONDITION を返す。client retry で吸収する契約 (ICameraBridge
+# docstring 参照)。
 _CAMERA_READY_TIMEOUT_S = 120.0
 _CAMERA_READY_RETRY_INTERVAL_S = 2.0
 
@@ -62,10 +57,9 @@ class TestCameraStream:
         first_png = out_dir / "frame_0000.png"
         last_png = out_dir / "frame_last.png"
 
-        # ``mp4v`` is the most broadly available codec in the headless
-        # opencv build shipped via pip; if the container OpenCV refuses it
-        # the writer will silently fail to open and ``out_path`` will stay
-        # zero-bytes (caught by the assertion below).
+        # ``mp4v`` is the codec most broadly available in pip-shipped headless
+        # opencv. If unavailable the writer silently fails open and ``out_path``
+        # stays zero-bytes (asserted below).
         fourcc = cv2.VideoWriter.fourcc(*"mp4v")
         writer = cv2.VideoWriter(
             str(out_path),
@@ -80,7 +74,7 @@ class TestCameraStream:
                 try:
                     async with CameraClient() as cam:
                         async for _ in cam.stream(width=1, height=1, fps_limit=1.0):
-                            return  # first frame proves bridge is ready
+                            return
                 except grpclib.exceptions.GRPCError as e:
                     if e.status != Status.FAILED_PRECONDITION:
                         raise
@@ -103,11 +97,8 @@ class TestCameraStream:
                     height=_CAPTURE_HEIGHT,
                     fps_limit=_CAPTURE_FPS,
                 ):
-                    # ``frame.pixels`` is a read-only RGBA view over the
-                    # protobuf bytes; cvtColor copies into a fresh BGR
-                    # buffer (alpha dropped) that ``VideoWriter`` /
-                    # ``imwrite`` accept. RGBA を保持して動画化するなら
-                    # MOV + PNG codec 等を別途検討。
+                    # cvtColor copies into a fresh writable BGR buffer that
+                    # VideoWriter / imwrite accept.
                     bgr = cv2.cvtColor(frame.pixels, cv2.COLOR_RGBA2BGR)
                     writer.write(bgr)
                     if count == 0:
@@ -125,7 +116,7 @@ class TestCameraStream:
         finally:
             writer.release()
 
-        # Printed so CI logs surface the artifact location even on success.
+        # Surface the artifact path even on green CI runs.
         print(f"E2E artifact dir: {out_dir}")
         print(f"E2E MP4: {out_path}")
 

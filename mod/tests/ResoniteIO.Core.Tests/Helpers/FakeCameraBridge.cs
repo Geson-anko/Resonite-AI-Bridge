@@ -3,15 +3,13 @@ using ResoniteIO.Core.Bridge;
 namespace ResoniteIO.Core.Tests.Helpers;
 
 /// <summary>
-/// テスト用の <see cref="ICameraBridge"/> 実装。要求解像度の checkerboard RGBA8 byte[] を
-/// 生成して返す。Bridge 側 FrameId は内部 long カウンタで monotonic に振る (proto に流す
-/// frame_id とは独立、CameraService 側で別途振り直される点を検証する用途)。
+/// テスト用 <see cref="ICameraBridge"/>。Bridge 側 FrameId は内部カウンタで monotonic
+/// に振り、CameraService が proto <c>frame_id</c> を独立に振り直す挙動を検証可能にする。
 /// </summary>
 internal sealed class FakeCameraBridge : ICameraBridge
 {
     private long _bridgeFrameId;
 
-    /// <summary>true なら <see cref="CaptureAsync"/> で必ず <see cref="CameraNotReadyException"/> を投げる。</summary>
     public bool ThrowNotReady { get; set; }
 
     /// <summary>各 capture 前に挟む遅延 (fps_limit pacing テスト等で利用)。</summary>
@@ -47,7 +45,6 @@ internal sealed class FakeCameraBridge : ICameraBridge
 
     private static byte[] CreateCheckerboard(int width, int height)
     {
-        // 8 ピクセル角の白黒チェッカーボード。RGBA byte order、row 0 = top。
         const int tile = 8;
         var buffer = new byte[width * height * 4];
         for (var y = 0; y < height; y++)

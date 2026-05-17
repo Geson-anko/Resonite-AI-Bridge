@@ -100,7 +100,8 @@ public sealed class ResoniteIOPlugin : BasePlugin
     // ProcessExit 経路ではログ出力経路がもう信頼できないため例外は飲む。
     private void OnProcessExit(object? sender, EventArgs e)
     {
-        // Camera 側を先に止めて Slot Destroy を engine に要求してから Session を片付ける。
+        // Camera Slot の Destroy は engine がまだ生きているうちに済ませる必要があるので
+        // Session host より先に dispose する。
         try
         {
             _cameraBridge?.Dispose();

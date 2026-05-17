@@ -6,8 +6,8 @@ using Xunit;
 
 namespace ResoniteIO.Core.Tests;
 
-// SessionHostHarness が RESONITE_IO_SOCKET env var を書き換えるため、SessionHostEnv collection で
-// SessionRoundTripTests / SessionBridgeWiringTests / SessionHostLifecycleTests と直列化する。
+// SessionHostHarness が RESONITE_IO_SOCKET env var を書き換えるため、SessionHostEnv
+// collection 内のテストと直列化する必要がある。
 [Collection("SessionHostEnv")]
 public sealed class CameraRoundTripTests
 {
@@ -37,7 +37,6 @@ public sealed class CameraRoundTripTests
             received.Add(frame);
             if (received.Count >= 3)
             {
-                // Client から ストリームを閉じる。Service 側ループは ct.IsCancellationRequested で抜ける。
                 cts.Cancel();
                 break;
             }
@@ -65,10 +64,9 @@ public sealed class CameraRoundTripTests
 
         const float fps = 10f;
         const double windowSeconds = 0.5;
-        // 期待値: 1/fps = 100ms pacing × 500ms = 5 frame だが、初回イテレーションは
-        // pacing 0 で即時送信される (=+1)、client 側 stopwatch は call 確立直後から
-        // 動き始める (= boundary 上で 1 frame ぶんの slip ありうる) ため、上限 8 で
-        // 不当に高速にループしていないことだけを検証する。下限 1 (= 何か受信)。
+        // 100ms pacing × 500ms = 5 frame が公称値。初回 frame の即時送信と client
+        // stopwatch の boundary slip を許して上限 8 とし、「不当に高速ループしていない」
+        // ことだけを検証する。
         const int expectedMax = 8;
 
         var request = new CameraStreamRequest
@@ -121,10 +119,7 @@ public sealed class CameraRoundTripTests
 
         var ex = await Assert.ThrowsAsync<RpcException>(async () =>
         {
-            await foreach (var _ in call.ResponseStream.ReadAllAsync(cts.Token))
-            {
-                // 1 フレームも出ないはず。
-            }
+            await foreach (var _ in call.ResponseStream.ReadAllAsync(cts.Token)) { }
         });
 
         Assert.Equal(StatusCode.FailedPrecondition, ex.StatusCode);

@@ -1,10 +1,4 @@
-"""Client for the Resonite IO ``Camera`` gRPC streaming service.
-
-The server emits raw RGBA8 frames with row 0 at the image top (fixed
-ResoniteIO API). The Python client wraps each frame in a :class:`Frame`
-POCO whose ``pixels`` field is an ``(H, W, 4)`` ``numpy.uint8`` array,
-sharing memory with the underlying protobuf bytes (zero-copy view).
-"""
+"""Client for the Resonite IO ``Camera`` gRPC streaming service."""
 
 from __future__ import annotations
 
@@ -33,9 +27,9 @@ _logger = logging.getLogger("resoio.camera")
 class Frame:
     """One decoded camera frame.
 
-    ``pixels`` is a view over the protobuf payload bytes (read-only by
-    default — call ``.copy()`` if you need a writable array). The byte
-    order is RGBA and row 0 is the image top.
+    ``pixels`` is an ``(H, W, 4)`` RGBA8 view over the protobuf payload
+    bytes (read-only; call ``.copy()`` for a writable array). Row 0 is
+    the image top.
     """
 
     pixels: NDArray[np.uint8]
@@ -49,9 +43,8 @@ class CameraClient:
     """Async client for the Resonite IO ``Camera`` service over a UDS.
 
     Use as an async context manager so the gRPC channel is closed
-    deterministically. ``socket_path`` resolution mirrors
-    :class:`resoio.SessionClient`: ``RESONITE_IO_SOCKET`` →
-    ``RESONITE_IO_SOCKET_DIR`` → ``~/.resonite-io/``.
+    deterministically. Socket resolution mirrors
+    :class:`resoio.SessionClient`.
     """
 
     def __init__(self, socket_path: str | None = None) -> None:
@@ -95,13 +88,10 @@ class CameraClient:
     ) -> AsyncIterator[Frame]:
         """Stream camera frames from the server.
 
-        ``width`` / ``height`` of 0 (the default) request the server
-        default of 640×480. ``fps_limit`` of 0 means uncapped
-        (best-effort native fps); a positive value asks the server to
-        pace frames at ``1 / fps_limit`` seconds. Large resolutions
-        (e.g. 4096×4096 = 64 MB per frame) are not capped client-side —
-        the caller is responsible for OOM management. Raises
-        :class:`RuntimeError` if called outside ``async with``.
+        ``width`` / ``height`` of 0 request the server default
+        (640×480); ``fps_limit`` of 0 means uncapped (best-effort native
+        fps). Raises :class:`RuntimeError` if called outside
+        ``async with``.
         """
         stub = self._stub
         if stub is None:
