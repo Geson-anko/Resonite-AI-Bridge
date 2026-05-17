@@ -7,8 +7,17 @@ lint:
   # SERVICE_SUFFIX は service 名に "Service" 接尾辞を要求するが、本プロジェクトでは
   # `Session` / `Camera` / `Locomotion` といったモダリティ名そのものを service 名に
   # 採用する方針 (Plan §2.1) のため除外する。
+  #
+  # RPC_REQUEST_STANDARD_NAME / RPC_RESPONSE_STANDARD_NAME は RPC ごとに
+  # `<Rpc>Request` / `<Rpc>Response` という envelope 命名を要求するが、
+  # 本プロジェクトでは streaming RPC のデータ型 (`CameraFrame` 等) を
+  # モダリティ固有のドメイン名で命名する方針 (Plan §1 Proto schema)。
+  # `CameraStreamRequest` / `CameraFrame` はモダリティ間で再利用しうる
+  # データ型として命名しているため、RPC 名にバインドした envelope 名は採らない。
   except:
     - SERVICE_SUFFIX
+    - RPC_REQUEST_STANDARD_NAME
+    - RPC_RESPONSE_STANDARD_NAME
 breaking:
   use:
     - FILE

@@ -33,8 +33,9 @@ RESONITE_DIR="${ResonitePath:-$HOME/.steam/steam/steamapps/common/Resonite}"
 
 # ===== EDIT THIS: decompile 対象 ============================================
 # Resonite 関連 first-party assembly のみ。配布物の中身が変わったら追記する。
+# パスは $RESONITE_DIR からの相対パス (フラット名 = 直下、サブディレクトリの場合は前置)。
 ASSEMBLIES=(
-  # Core engine
+  # Core engine (FrooxEngine プロセス側、Resonite.exe にロード)
   FrooxEngine.dll
   FrooxEngine.Commands.dll
   FrooxEngine.Store.dll
@@ -49,9 +50,14 @@ ASSEMBLIES=(
   ProtoFlux.Nodes.Core.dll
   ProtoFlux.Nodes.FrooxEngine.dll
   ProtoFluxBindings.dll
-  # Renderite
+  # Renderite host (Resonite.exe 側、shared memory IPC で renderer と話す)
   Renderite.Shared.dll
   Renderite.Host.dll
+  # Renderite renderer (Renderite.Renderer.exe = Unity プロセス側の実装本体)
+  # Camera / HeadOutput など「ユーザー画面の実描画」はこちらにある。
+  Renderer/Renderite.Renderer_Data/Managed/Renderite.Unity.dll
+  Renderer/Renderite.Renderer_Data/Managed/Assembly-CSharp.dll
+  Renderer/Renderite.Renderer_Data/Managed/NativeGraphics.NET.dll
   # SkyFrost (cloud / data model)
   SkyFrost.Base.dll
   SkyFrost.Base.Models.dll
@@ -59,8 +65,9 @@ ASSEMBLIES=(
   PhotonDust.dll
   ResoniteLink.dll
   resonite-clipboard-cs.dll
-  # NOTE: Resonite.exe / Renderite.Host.exe は **native PE 実行ファイル** (managed
-  # metadata を持たない bootstrapper) なので ilspycmd では decompile できない。
+  # NOTE: Resonite.exe / Renderite.Host.exe / Renderite.Renderer.exe は
+  # **native PE 実行ファイル** (managed metadata を持たない bootstrapper) なので
+  # ilspycmd では decompile できない。
   # NOTE: Mnemosyne.dll は ilspycmd 10.0.1.x 系の TargetFramework 検出バグに
   # 当たって失敗する (netstandard 1.x 由来? どのモードでも同じ箇所で例外)。
   # ilspycmd を上げて解消したら再度足す。
@@ -81,7 +88,14 @@ main() {
   log "Resonite directory: $RESONITE_DIR"
 
   # bundled .NET runtime の reference path 解決 (mscorlib / System.* 用)。
+  # Renderite renderer 側 (Unity プロセス) の DLL 解決のため
+  # Renderite.Renderer_Data/Managed も reference に含める。
   local -a ref_args=(-r "$RESONITE_DIR")
+  local renderer_managed="$RESONITE_DIR/Renderer/Renderite.Renderer_Data/Managed"
+  if [[ -d "$renderer_managed" ]]; then
+    ref_args+=(-r "$renderer_managed")
+    log "Reference path: $renderer_managed"
+  fi
   local runtime_root="$RESONITE_DIR/dotnet-runtime/shared/Microsoft.NETCore.App"
   if [[ -d "$runtime_root" ]]; then
     while IFS= read -r -d '' d; do
@@ -110,7 +124,7 @@ main() {
 
   # `set -e` を一時的に外して各 DLL の失敗を許容する。
   set +e
-  local asm src base out_subdir
+  local asm src filename base out_subdir
   for asm in "${ASSEMBLIES[@]}"; do
     src="$RESONITE_DIR/$asm"
     if [[ ! -f "$src" ]]; then
@@ -118,7 +132,10 @@ main() {
       skipped+=("$asm")
       continue
     fi
-    base="${asm%.*}"
+    # サブディレクトリ付きパスでも出力先は basename ベースの flat 名にする
+    # (例: Renderer/.../Renderite.Unity.dll → decompiled/Renderite.Unity/)
+    filename="$(basename "$asm")"
+    base="${filename%.*}"
     out_subdir="$OUT_DIR/$base"
     mkdir -p "$out_subdir"
     log "→ $asm  (out: decompiled/$base/)"

@@ -34,7 +34,10 @@ internal sealed class SessionHostHarness : IAsyncDisposable
         _previousEnv = previousEnv;
     }
 
-    public static async Task<SessionHostHarness> StartAsync(ISessionBridge? bridge = null)
+    public static async Task<SessionHostHarness> StartAsync(
+        ISessionBridge? bridge = null,
+        ICameraBridge? cameraBridge = null
+    )
     {
         var socketPath = Path.Combine(Path.GetTempPath(), $"rio-test-{Guid.NewGuid():N}.sock");
         var previousEnv = Environment.GetEnvironmentVariable("RESONITE_IO_SOCKET");
@@ -44,7 +47,7 @@ internal sealed class SessionHostHarness : IAsyncDisposable
         SessionHost host;
         try
         {
-            host = SessionHost.Start(new NullLogSink(), cts.Token, bridge);
+            host = SessionHost.Start(new NullLogSink(), cts.Token, bridge, cameraBridge);
         }
         catch
         {

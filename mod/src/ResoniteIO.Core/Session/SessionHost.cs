@@ -5,14 +5,22 @@ using Microsoft.AspNetCore.Server.Kestrel.Core;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using ResoniteIO.Core.Bridge;
+using ResoniteIO.Core.Camera;
 using ResoniteIO.Core.Logging;
 
 namespace ResoniteIO.Core.Session;
 
 /// <summary>
-/// Kestrel + UDS 上で <see cref="SessionService"/> を hosting する gRPC server lifecycle。
+/// Kestrel + UDS 上で ResoniteIO の全モダリティ gRPC service を hosting する lifecycle。
 /// </summary>
 /// <remarks>
+/// <para>
+/// 名前は <c>SessionHost</c> だが実体は <see cref="SessionService"/> /
+/// <see cref="CameraService"/> 等を 1 つの UDS endpoint に集約するプロセス全体の host。
+/// 新しいモダリティを追加するときも本クラスから <c>MapGrpcService&lt;NewService&gt;()</c>
+/// する (UDS は 1 本に固定し、client は modality ごとに stub を切り替える)。
+/// </para>
+/// <para>
 /// socket path 解決順: <c>RESONITE_IO_SOCKET</c> (フルパス) →
 /// <c>RESONITE_IO_SOCKET_DIR</c> 配下の <c>resonite-{pid}.sock</c> →
 /// <c>$HOME/.resonite-io/resonite-{pid}.sock</c>。デフォルトを <c>$HOME</c> 配下にする
@@ -20,6 +28,7 @@ namespace ResoniteIO.Core.Session;
 /// mod (sandbox 内) とホスト/コンテナ Python client が同じ inode に到達できる
 /// (Docker は <c>${HOME}/.resonite-io</c> を <c>/home/dev/.resonite-io</c> に bind し
 /// username 差を吸収)。
+/// </para>
 /// </remarks>
 public sealed class SessionHost : IAsyncDisposable
 {
@@ -52,14 +61,19 @@ public sealed class SessionHost : IAsyncDisposable
 
     /// <summary>
     /// Kestrel の listen 完了を同期的に待ってから返す。停止は dispose または
-    /// <paramref name="cancellationToken"/> 経由。<paramref name="bridge"/> は省略
-    /// 可能 (Core 単体テスト用)。<see cref="InvalidOperationException"/> は socket path を
-    /// 解決できなかった場合 (<c>HOME</c> 未設定環境)。
+    /// <paramref name="cancellationToken"/> 経由。
     /// </summary>
+    /// <remarks>
+    /// Bridge 引数は全て optional (モダリティ未提供構成や Core 単体テストとの両立)。
+    /// null Bridge を持つ Service は呼ばれた時点で <c>Unavailable</c> を返す。
+    /// socket path を解決できない場合 (<c>HOME</c> 未設定等) は
+    /// <see cref="InvalidOperationException"/>。
+    /// </remarks>
     public static SessionHost Start(
         ILogSink log,
         CancellationToken cancellationToken,
-        ISessionBridge? bridge = null
+        ISessionBridge? bridge = null,
+        ICameraBridge? cameraBridge = null
     )
     {
         ArgumentNullException.ThrowIfNull(log);
@@ -75,11 +89,21 @@ public sealed class SessionHost : IAsyncDisposable
         TryUnlink(socketPath);
 
         var builder = WebApplication.CreateSlimBuilder();
-        builder.Services.AddGrpc();
+        // Camera が 4K で 64MB クラスの RGBA8 raw フレームを流すため上限を外す
+        // (proto 側では上限を設けない方針 — Plan §1)。
+        builder.Services.AddGrpc(o =>
+        {
+            o.MaxReceiveMessageSize = int.MaxValue;
+            o.MaxSendMessageSize = int.MaxValue;
+        });
         builder.Services.AddSingleton(log);
         if (bridge is not null)
         {
             builder.Services.AddSingleton(bridge);
+        }
+        if (cameraBridge is not null)
+        {
+            builder.Services.AddSingleton(cameraBridge);
         }
         builder.WebHost.ConfigureKestrel(opts =>
         {
@@ -91,6 +115,7 @@ public sealed class SessionHost : IAsyncDisposable
 
         var app = builder.Build();
         app.MapGrpcService<SessionService>();
+        app.MapGrpcService<CameraService>();
 
         EventHandler processExitHandler = (_, _) => TryUnlink(socketPath);
         AppDomain.CurrentDomain.ProcessExit += processExitHandler;

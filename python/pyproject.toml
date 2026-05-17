@@ -7,6 +7,7 @@ authors = []
 requires-python = ">=3.12"
 dependencies = [
   "betterproto2[grpclib]",
+  "numpy>=2.0",
 ]
 
 [build-system]
@@ -18,6 +19,10 @@ dev = [
   # Compiler ships as its own package (no `[compiler]` extra exists on
   # betterproto2 itself — confirmed against PyPI metadata 2026-05).
   "betterproto2_compiler",
+  # E2E only: tests/e2e/camera_stream.py uses cv2.VideoWriter to record
+  # captured BGRA frames as MP4. The headless distribution avoids X11/Qt
+  # system libs (libxcb etc.) which the dev container does not ship.
+  "opencv-python-headless>=4.10",
   "pyright>=1.1.398",
   "pytest>=8.3.5",
   "pytest-asyncio>=0.24.0",

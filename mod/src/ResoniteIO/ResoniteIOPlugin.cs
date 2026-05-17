@@ -39,6 +39,7 @@ public sealed class ResoniteIOPlugin : BasePlugin
     private CancellationTokenSource? _hostCts;
     private SessionHost? _sessionHost;
     private FrooxEngineSessionBridge? _sessionBridge;
+    private FrooxEngineCameraBridge? _cameraBridge;
 
     /// <remarks>
     /// 重要: PluginAssemblyResolver attach **以前** に <c>ResoniteIO.Core</c> 配下の型
@@ -81,7 +82,13 @@ public sealed class ResoniteIOPlugin : BasePlugin
             // plugin folder 同梱の Core.dll / Google.Protobuf.dll が優先される。
             _logSink = new BepInExLogSink(Log);
             _sessionBridge = new FrooxEngineSessionBridge(Engine.Current, _logSink);
-            _sessionHost = SessionHost.Start(_logSink, _hostCts.Token, _sessionBridge);
+            _cameraBridge = new FrooxEngineCameraBridge(Engine.Current, _logSink);
+            _sessionHost = SessionHost.Start(
+                _logSink,
+                _hostCts.Token,
+                _sessionBridge,
+                _cameraBridge
+            );
             Log.LogInfo($"Session gRPC host bound at: {_sessionHost.SocketPath}");
         }
         catch (Exception ex)
@@ -93,6 +100,14 @@ public sealed class ResoniteIOPlugin : BasePlugin
     // ProcessExit 経路ではログ出力経路がもう信頼できないため例外は飲む。
     private void OnProcessExit(object? sender, EventArgs e)
     {
+        // Camera Slot の Destroy は engine がまだ生きているうちに済ませる必要があるので
+        // Session host より先に dispose する。
+        try
+        {
+            _cameraBridge?.Dispose();
+        }
+        catch { }
+
         try
         {
             _sessionBridge?.Dispose();

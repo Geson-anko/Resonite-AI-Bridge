@@ -2,17 +2,21 @@
 
 from __future__ import annotations
 
-import glob
 import logging
-import os
-from pathlib import Path
 from types import TracebackType
 from typing import Self
 
 from grpclib.client import Channel
 
 from resoio._generated.resonite_io.v1 import PingRequest, PingResponse, SessionStub
+from resoio._socket import (
+    AmbiguousSocketError,
+    SocketNotFoundError,
+    resolve_socket_path,
+)
 
+# Re-exported for backwards compatibility: the exception types historically
+# lived in this module and are documented in ``SessionClient`` docstring.
 __all__ = [
     "AmbiguousSocketError",
     "SessionClient",
@@ -20,51 +24,6 @@ __all__ = [
 ]
 
 _logger = logging.getLogger("resoio.session")
-
-_SOCKET_GLOB = "resonite-*.sock"
-_DEFAULT_SOCKET_DIR_NAME = ".resonite-io"
-
-
-class SocketNotFoundError(RuntimeError):
-    """No ``resonite-*.sock`` matched the configured search directory."""
-
-
-class AmbiguousSocketError(RuntimeError):
-    """Multiple candidate sockets found; set ``RESONITE_IO_SOCKET`` to pick
-    one."""
-
-
-def _resolve_socket_path() -> str:
-    # Empty env-var values fall through to the next step so a stray ``FOO=`` in
-    # shell config does not produce a bogus empty path. The ``~/.resonite-io/``
-    # fallback mirrors the C# Mod default so a zero-arg client just works under
-    # the same effective user (including across the pressure-vessel sandbox).
-    explicit = os.environ.get("RESONITE_IO_SOCKET")
-    if explicit:
-        return explicit
-
-    search_dir = os.environ.get("RESONITE_IO_SOCKET_DIR")
-    if search_dir:
-        return _pick_single_socket(search_dir)
-
-    return _pick_single_socket(str(Path.home() / _DEFAULT_SOCKET_DIR_NAME))
-
-
-def _pick_single_socket(directory: str) -> str:
-    pattern = os.path.join(directory, _SOCKET_GLOB)
-    candidates = sorted(glob.glob(pattern))
-    if not candidates:
-        raise SocketNotFoundError(
-            f"No Resonite IO socket matched {pattern!r}. "
-            "Is the mod running and bound to a UDS?"
-        )
-    if len(candidates) > 1:
-        joined = ", ".join(candidates)
-        raise AmbiguousSocketError(
-            f"Multiple Resonite IO sockets matched {pattern!r}: {joined}. "
-            "Set RESONITE_IO_SOCKET to disambiguate."
-        )
-    return candidates[0]
 
 
 class SessionClient:
@@ -92,7 +51,7 @@ class SessionClient:
         return self._resolved_path
 
     async def __aenter__(self) -> Self:
-        path = self._explicit_path or _resolve_socket_path()
+        path = self._explicit_path or resolve_socket_path()
         _logger.debug("Opening Session channel on UDS path: %s", path)
         channel = Channel(path=path)
         self._channel = channel

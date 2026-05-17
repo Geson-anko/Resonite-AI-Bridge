@@ -1,0 +1,44 @@
+// Camera service: ユーザー画面相当の映像を server-streaming で配信する。
+//
+// 向きは常に top-left origin (row 0 = 画像上端) に正規化して送る。`flip_y` の
+// ような向き指定フィールドは持たない (下流コードでの mental cost を減らすため)。
+//
+// RGBA8 を選んでいるのは numpy / PIL / OpenGL 等のモダン画像処理ライブラリと
+// Unity の `TextureFormat.RGBA32` の byte 順 (R, G, B, A) に揃えるため
+// (BGRA は Windows D3D legacy、ARGB は古い Mac/Java legacy)。
+//
+// 巨大フレーム (4K で 64MB クラス) は proto では上限を設けず gRPC channel の
+// max message size 設定で吸収する。
+syntax = "proto3";
+
+package resonite_io.v1;
+
+option csharp_namespace = "ResoniteIO.V1";
+
+// width/height が 0 以下のときはサーバ既定 (640x480)、fps_limit が 0 以下のときは
+// pacing 無し (best-effort native fps)。
+message CameraStreamRequest {
+  int32 width = 1;
+  int32 height = 2;
+  float fps_limit = 3;
+}
+
+enum CameraFrameFormat {
+  CAMERA_FRAME_FORMAT_UNSPECIFIED = 0;
+  // 1 ピクセル 4 byte (R, G, B, A の順)、row 0 = 画像上端 (top-left origin)。
+  CAMERA_FRAME_FORMAT_RGBA8 = 1;
+}
+
+// pixels の長さは RGBA8 時 width * height * 4。
+message CameraFrame {
+  int32 width = 1;
+  int32 height = 2;
+  CameraFrameFormat format = 3;
+  int64 unix_nanos = 4;
+  int64 frame_id = 5;
+  bytes pixels = 6;
+}
+
+service Camera {
+  rpc StreamFrames(CameraStreamRequest) returns (stream CameraFrame);
+}
