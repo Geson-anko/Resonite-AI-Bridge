@@ -32,9 +32,11 @@ namespace ResoniteIO.Core.Session;
 /// </remarks>
 public sealed class SessionHost : IAsyncDisposable
 {
+    private const string SocketFilePrefix = "resonite-";
+    private const string SocketFileSuffix = ".sock";
+
     private readonly WebApplication _app;
     private readonly ILogSink _log;
-    private readonly EventHandler _processExitHandler;
     private readonly Task _runTask;
     private bool _disposed;
 
@@ -44,18 +46,11 @@ public sealed class SessionHost : IAsyncDisposable
     /// </summary>
     public string SocketPath { get; }
 
-    private SessionHost(
-        WebApplication app,
-        ILogSink log,
-        string socketPath,
-        EventHandler processExitHandler,
-        Task runTask
-    )
+    private SessionHost(WebApplication app, ILogSink log, string socketPath, Task runTask)
     {
         _app = app;
         _log = log;
         SocketPath = socketPath;
-        _processExitHandler = processExitHandler;
         _runTask = runTask;
     }
 
@@ -84,6 +79,7 @@ public sealed class SessionHost : IAsyncDisposable
         if (!string.IsNullOrEmpty(socketDir))
         {
             Directory.CreateDirectory(socketDir);
+            PurgeStaleSockets(socketDir, Process.GetCurrentProcess().Id, log);
         }
 
         TryUnlink(socketPath);
@@ -117,9 +113,6 @@ public sealed class SessionHost : IAsyncDisposable
         app.MapGrpcService<SessionService>();
         app.MapGrpcService<CameraService>();
 
-        EventHandler processExitHandler = (_, _) => TryUnlink(socketPath);
-        AppDomain.CurrentDomain.ProcessExit += processExitHandler;
-
         log.LogInfo($"SessionHost binding UDS at {socketPath}");
 
         // Sync-wait on StartAsync so SocketPath is guaranteed accept-ready on return.
@@ -130,7 +123,6 @@ public sealed class SessionHost : IAsyncDisposable
         catch (Exception ex)
         {
             log.LogError($"SessionHost failed to start Kestrel: {ex}");
-            AppDomain.CurrentDomain.ProcessExit -= processExitHandler;
             TryUnlink(socketPath);
             app.DisposeAsync().AsTask().GetAwaiter().GetResult();
             throw;
@@ -154,7 +146,7 @@ public sealed class SessionHost : IAsyncDisposable
             CancellationToken.None
         );
 
-        return new SessionHost(app, log, socketPath, processExitHandler, runTask);
+        return new SessionHost(app, log, socketPath, runTask);
     }
 
     public async ValueTask DisposeAsync()
@@ -164,8 +156,6 @@ public sealed class SessionHost : IAsyncDisposable
             return;
         }
         _disposed = true;
-
-        AppDomain.CurrentDomain.ProcessExit -= _processExitHandler;
 
         try
         {
@@ -230,6 +220,72 @@ public sealed class SessionHost : IAsyncDisposable
         catch
         {
             // best-effort: 削除失敗でも次回起動時に上書きされる。
+        }
+    }
+
+    // SIGKILL 等で前回の DisposeAsync / Plugin.OnProcessExit を踏まずに死んだ場合、
+    // resonite-{pid}.sock が残留する。次回起動時に死んだ PID 由来のものだけ掃除する
+    // ことで、host_agent.py の resonite-stop が SIGKILL に踏み切っても自己回復する。
+    private static void PurgeStaleSockets(string directory, int currentPid, ILogSink log)
+    {
+        if (!Directory.Exists(directory))
+        {
+            return;
+        }
+
+        var removed = 0;
+        foreach (
+            var path in Directory.EnumerateFiles(
+                directory,
+                $"{SocketFilePrefix}*{SocketFileSuffix}"
+            )
+        )
+        {
+            var name = Path.GetFileName(path);
+            var pidPart = name.Substring(
+                SocketFilePrefix.Length,
+                name.Length - SocketFilePrefix.Length - SocketFileSuffix.Length
+            );
+
+            if (!int.TryParse(pidPart, out var pid))
+            {
+                continue;
+            }
+
+            if (pid != currentPid && IsProcessAlive(pid))
+            {
+                continue;
+            }
+
+            TryUnlink(path);
+            removed++;
+        }
+
+        if (removed > 0)
+        {
+            log.LogInfo($"Removed {removed} stale UDS socket file(s) under {directory}");
+        }
+    }
+
+    private static bool IsProcessAlive(int pid)
+    {
+        if (pid <= 0)
+        {
+            return false;
+        }
+
+        try
+        {
+            using var proc = Process.GetProcessById(pid);
+            return !proc.HasExited;
+        }
+        catch (ArgumentException)
+        {
+            return false;
+        }
+        catch (InvalidOperationException)
+        {
+            return false;
         }
     }
 }
