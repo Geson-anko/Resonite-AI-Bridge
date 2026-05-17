@@ -37,6 +37,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
         libatomic1 \
         libicu72 \
         netcat-openbsd \
+        ffmpeg \
         python3 \
         shellcheck \
         shfmt \
@@ -68,7 +69,8 @@ RUN set -eux; \
     uvx --generate-shell-completion bash > /etc/bash_completion.d/uvx; \
     just --completions bash > /etc/bash_completion.d/just; \
     echo '[ -f /usr/share/bash-completion/bash_completion ] && . /usr/share/bash-completion/bash_completion' \
-      >> /etc/bash.bashrc
+      >> /etc/bash.bashrc; \
+    echo '[ -f /workspace/clicomp.sh ] && . /workspace/clicomp.sh' >> /etc/bash.bashrc
 
 # キャッシュ系 (.nuget / .cache/uv) は named volume のマウント先で、Docker が初回
 # マウント時に target dir の所有権/モードを継承するため dev 所有で先行作成しておく。
