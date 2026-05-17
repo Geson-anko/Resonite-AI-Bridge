@@ -12,7 +12,7 @@ public interface ICameraBridge
 {
     /// <summary>
     /// 要求された解像度で 1 フレームをキャプチャする。pixels は
-    /// <see cref="CameraFrameFormat.Bgra8"/> 時 row 0 = 画像上端 (top-left origin) で返す
+    /// <see cref="CameraFrameFormat.Rgba8"/> 時 row 0 = 画像上端 (top-left origin) で返す
     /// ことを契約とする (proto API 規約を Bridge IF レベルで強制)。
     /// </summary>
     /// <exception cref="CameraNotReadyException">
@@ -42,8 +42,8 @@ public enum CameraFrameFormat
 {
     Unspecified = 0,
 
-    /// <summary>1 ピクセル 4 byte (B, G, R, A の順)、row 0 = 画像上端 (top-left origin)。</summary>
-    Bgra8 = 1,
+    /// <summary>1 ピクセル 4 byte (R, G, B, A の順)、row 0 = 画像上端 (top-left origin)。</summary>
+    Rgba8 = 1,
 }
 
 /// <summary>

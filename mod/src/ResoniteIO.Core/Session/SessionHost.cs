@@ -90,7 +90,7 @@ public sealed class SessionHost : IAsyncDisposable
         TryUnlink(socketPath);
 
         var builder = WebApplication.CreateSlimBuilder();
-        // Camera は任意解像度の BGRA8 raw を流す (4K×4K で 64MB クラス)。proto レベルでは
+        // Camera は任意解像度の RGBA8 raw を流す (4K×4K で 64MB クラス)。proto レベルでは
         // 上限を設けず gRPC channel 設定を緩めて運用する (Plan §1 Proto schema)。
         // int.MaxValue を渡すと Grpc.AspNetCore.Server は "上限相当の最大値" として扱う。
         builder.Services.AddGrpc(o =>

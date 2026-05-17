@@ -3,7 +3,7 @@ using ResoniteIO.Core.Bridge;
 namespace ResoniteIO.Core.Tests.Helpers;
 
 /// <summary>
-/// テスト用の <see cref="ICameraBridge"/> 実装。要求解像度の checkerboard BGRA8 byte[] を
+/// テスト用の <see cref="ICameraBridge"/> 実装。要求解像度の checkerboard RGBA8 byte[] を
 /// 生成して返す。Bridge 側 FrameId は内部 long カウンタで monotonic に振る (proto に流す
 /// frame_id とは独立、CameraService 側で別途振り直される点を検証する用途)。
 /// </summary>
@@ -41,13 +41,13 @@ internal sealed class FakeCameraBridge : ICameraBridge
             Height: height,
             UnixNanos: unixNanos,
             FrameId: id,
-            Format: CameraFrameFormat.Bgra8
+            Format: CameraFrameFormat.Rgba8
         );
     }
 
     private static byte[] CreateCheckerboard(int width, int height)
     {
-        // 8 ピクセル角の白黒チェッカーボード。BGRA byte order、row 0 = top。
+        // 8 ピクセル角の白黒チェッカーボード。RGBA byte order、row 0 = top。
         const int tile = 8;
         var buffer = new byte[width * height * 4];
         for (var y = 0; y < height; y++)
@@ -57,9 +57,9 @@ internal sealed class FakeCameraBridge : ICameraBridge
                 var isWhite = ((x / tile) + (y / tile)) % 2 == 0;
                 var i = ((y * width) + x) * 4;
                 var v = (byte)(isWhite ? 0xFF : 0x00);
-                buffer[i + 0] = v; // B
+                buffer[i + 0] = v; // R
                 buffer[i + 1] = v; // G
-                buffer[i + 2] = v; // R
+                buffer[i + 2] = v; // B
                 buffer[i + 3] = 0xFF; // A
             }
         }

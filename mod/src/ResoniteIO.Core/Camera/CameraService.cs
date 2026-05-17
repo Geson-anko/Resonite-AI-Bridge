@@ -166,7 +166,7 @@ public sealed class CameraService : V1.Camera.CameraBase
     private static V1.CameraFrameFormat ToProtoFormat(CameraFrameFormat format) =>
         format switch
         {
-            CameraFrameFormat.Bgra8 => V1.CameraFrameFormat.Bgra8,
+            CameraFrameFormat.Rgba8 => V1.CameraFrameFormat.Rgba8,
             CameraFrameFormat.Unspecified => V1.CameraFrameFormat.Unspecified,
             _ => V1.CameraFrameFormat.Unspecified,
         };

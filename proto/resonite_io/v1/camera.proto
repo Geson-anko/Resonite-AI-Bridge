@@ -1,9 +1,13 @@
 // Camera service: ユーザー画面相当の映像を server-streaming で配信する。
 //
-// `StreamFrames` は要求された解像度の BGRA8 raw フレームを連続送信する。
-// 座標規約は ResoniteIO 全体の固定 API: row 0 = top-left, BGRA byte order。
+// `StreamFrames` は要求された解像度の RGBA8 raw フレームを連続送信する。
+// 座標規約は ResoniteIO 全体の固定 API: row 0 = top-left, RGBA byte order。
 // `flip_y` のような向き指定フィールドはあえて持たず、サーバ側で常に top-down に
 // 正規化して送る (下流コードでの mental cost を減らすため)。
+//
+// RGBA を採用するのは Unity の TextureFormat.RGBA32 が R, G, B, A の byte 順で
+// `GetRawTextureData` を返す仕様と、numpy / PIL / OpenGL 等のモダン画像処理ライブラリの
+// 標準に揃えるため (BGRA は Windows D3D legacy, ARGB は古い Mac/Java legacy)。
 //
 // pixels サイズ上限は proto レベルでは設けず、Channel 設定 (max message size) を
 // 緩めることで運用する。4K (4096*4096*4 = 64MB) のような巨大フレームは
@@ -26,12 +30,12 @@ message CameraStreamRequest {
 // CameraFrameFormat は pixels の byte 配置を識別する。
 enum CameraFrameFormat {
   CAMERA_FRAME_FORMAT_UNSPECIFIED = 0;
-  // BGRA8: 1 ピクセル 4 byte (B, G, R, A の順)、row 0 = 画像上端 (top-left origin)。
-  CAMERA_FRAME_FORMAT_BGRA8 = 1;
+  // RGBA8: 1 ピクセル 4 byte (R, G, B, A の順)、row 0 = 画像上端 (top-left origin)。
+  CAMERA_FRAME_FORMAT_RGBA8 = 1;
 }
 
 // CameraFrame は 1 フレーム分の raw pixel と metadata。
-// pixels の長さは必ず width * height * 4 (BGRA8 時)。
+// pixels の長さは必ず width * height * 4 (RGBA8 時)。
 message CameraFrame {
   int32 width = 1;
   int32 height = 2;

@@ -13,7 +13,7 @@ namespace ResoniteIO.Bridge;
 /// <summary>
 /// <see cref="ICameraBridge"/> の FrooxEngine 実装。LocalUser の HeadSlot 配下に
 /// <see cref="Camera"/> コンポーネントを生成し、<see cref="Camera.RenderToBitmap"/>
-/// で BGRA8 raw を 1 フレーム取り出して Core へ渡す。
+/// で RGBA8 raw を 1 フレーム取り出して Core へ渡す。
 /// </summary>
 /// <remarks>
 /// 設計判断:
@@ -43,16 +43,25 @@ namespace ResoniteIO.Bridge;
 ///   </item>
 ///   <item>
 ///     <description>
-///       座標系: proto API として top-left origin (row 0 = 上端) BGRA に固定する契約
+///       座標系: proto API として top-left origin (row 0 = 上端) RGBA に固定する契約
 ///       (<see cref="ICameraBridge"/> docstring 参照)。<see cref="Bitmap"/> が
 ///       <c>FlipY=true</c> で返ってきた場合は行単位 reverse して正規化する。
+///     </description>
+///   </item>
+///   <item>
+///     <description>
+///       RenderTask の textureFormat 既定 (<c>ARGB32</c>) は Unity 上で A,R,G,B の byte 順で
+///       <c>GetRawTextureData</c> に返るため、proto の RGBA8 契約と整合しない。Bridge では
+///       <c>TextureFormat.RGBA32</c> を明示し R,G,B,A の byte 順を強制する (Camera.RenderToBitmap
+///       が GetRenderSettings 経由で隠してしまうので、独自に RenderTask を組み立てて
+///       <see cref="RenderManager.RenderToBitmap"/> を直接呼ぶ)。
 ///     </description>
 ///   </item>
 /// </list>
 /// </remarks>
 internal sealed class FrooxEngineCameraBridge : ICameraBridge, IDisposable
 {
-    // BGRA8 固定。proto 規約と一致 (ICameraBridge / CameraFrameFormat.Bgra8)。
+    // RGBA8 固定。proto 規約と一致 (ICameraBridge / CameraFrameFormat.Rgba8)。
     private const int BytesPerPixel = 4;
 
     // engine thread への Camera 生成ディスパッチが噛み合わないケースの保険。
@@ -85,10 +94,17 @@ internal sealed class FrooxEngineCameraBridge : ICameraBridge, IDisposable
 
         var camera = await EnsureCameraAsync(ct).ConfigureAwait(false);
 
+        // RenderTask を独自に組み立てて textureFormat = RGBA32 を強制する。
+        // Camera.GetRenderSettings の default は ARGB32 (Unity 側で byte 順は A,R,G,B) で
+        // proto の RGBA8 契約と不整合になるため、Camera.RenderToBitmap を使わず
+        // RenderManager.RenderToBitmap(RenderTask) を直接叩く。
+        var renderTask = camera.GetRenderSettings(new int2(width, height));
+        renderTask.parameters.textureFormat = TextureFormat.RGBA32;
+
         Bitmap2D bitmap;
         try
         {
-            bitmap = await camera.RenderToBitmap(new int2(width, height)).ConfigureAwait(false);
+            bitmap = await camera.World.Render.RenderToBitmap(renderTask).ConfigureAwait(false);
         }
         catch (Exception ex) when (ex is not OperationCanceledException)
         {
@@ -109,7 +125,7 @@ internal sealed class FrooxEngineCameraBridge : ICameraBridge, IDisposable
         try
         {
             bitmap.EnsureManagedMemoryBuffer();
-            var pixels = ToTopLeftOriginBgra(bitmap, width, height);
+            var pixels = ToTopLeftOriginRgba(bitmap, width, height);
             var unixNanos = (DateTimeOffset.UtcNow.UtcTicks - DateTime.UnixEpoch.Ticks) * 100L;
             var id = Interlocked.Increment(ref _bridgeFrameId);
             return new CameraFrame(
@@ -118,7 +134,7 @@ internal sealed class FrooxEngineCameraBridge : ICameraBridge, IDisposable
                 Height: height,
                 UnixNanos: unixNanos,
                 FrameId: id,
-                Format: CameraFrameFormat.Bgra8
+                Format: CameraFrameFormat.Rgba8
             );
         }
         finally
@@ -269,10 +285,12 @@ internal sealed class FrooxEngineCameraBridge : ICameraBridge, IDisposable
 
     /// <summary>
     /// Bitmap2D が <c>FlipY=true</c> (bottom-up) で返ってきた場合に行単位で逆順コピーし、
-    /// proto 規約の top-left origin に正規化する。<c>FlipY=false</c> なら単純な
+    /// proto 規約の top-left origin RGBA に正規化する。<c>FlipY=false</c> なら単純な
     /// <c>ToArray</c> 相当のコピー (Buffer 寿命と独立した byte[] に detach するため)。
+    /// byte 順そのものは upstream で <c>TextureFormat.RGBA32</c> を指定済みなのでここで
+    /// 変換不要。
     /// </summary>
-    private static byte[] ToTopLeftOriginBgra(Bitmap2D bitmap, int width, int height)
+    private static byte[] ToTopLeftOriginRgba(Bitmap2D bitmap, int width, int height)
     {
         var stride = width * BytesPerPixel;
         var expected = stride * height;
@@ -287,7 +305,7 @@ internal sealed class FrooxEngineCameraBridge : ICameraBridge, IDisposable
         var dst = new byte[expected];
         if (bitmap.FlipY)
         {
-            // bottom-up な src を row 単位で逆順に dst に詰める。1024² BGRA で ~4MB の
+            // bottom-up な src を row 単位で逆順に dst に詰める。1024² RGBA で ~4MB の
             // memcpy = サブミリ秒。perf 化したら SIMD 検討。
             for (var y = 0; y < height; y++)
             {

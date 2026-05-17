@@ -50,7 +50,7 @@ public sealed class CameraRoundTripTests
             Assert.Equal(width, f.Width);
             Assert.Equal(height, f.Height);
             Assert.Equal((long)i, f.FrameId);
-            Assert.Equal(CameraFrameFormat.Bgra8, f.Format);
+            Assert.Equal(CameraFrameFormat.Rgba8, f.Format);
             Assert.Equal(width * height * 4, f.Pixels.Length);
         }
     }

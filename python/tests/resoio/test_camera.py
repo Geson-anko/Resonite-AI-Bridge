@@ -22,7 +22,7 @@ _FRAME_COUNT = 3
 
 
 class _EchoCamera(CameraBase):
-    """In-process fake that yields ``_FRAME_COUNT`` synthetic BGRA8 frames.
+    """In-process fake that yields ``_FRAME_COUNT`` synthetic RGBA8 frames.
 
     A request with width/height == 0 falls back to (_DEFAULT_W,
     _DEFAULT_H) so we can verify the client tolerates the "server-
@@ -42,7 +42,7 @@ class _EchoCamera(CameraBase):
             yield CameraFrame(
                 width=w,
                 height=h,
-                format=CameraFrameFormat.BGRA8,
+                format=CameraFrameFormat.RGBA8,
                 unix_nanos=time.time_ns(),
                 frame_id=i,
                 pixels=pixels,

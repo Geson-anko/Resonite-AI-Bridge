@@ -41,23 +41,23 @@ class CameraFrameFormat(betterproto2.Enum):
 
     UNSPECIFIED = 0
 
-    BGRA8 = 1
+    RGBA8 = 1
     """
-    BGRA8: 1 ピクセル 4 byte (B, G, R, A の順)、row 0 = 画像上端 (top-left origin)。
+    RGBA8: 1 ピクセル 4 byte (R, G, B, A の順)、row 0 = 画像上端 (top-left origin)。
     """
 
     @classmethod
     def betterproto_value_to_renamed_proto_names(cls) -> dict[int, str]:
         return {
             0: "CAMERA_FRAME_FORMAT_UNSPECIFIED",
-            1: "CAMERA_FRAME_FORMAT_BGRA8",
+            1: "CAMERA_FRAME_FORMAT_RGBA8",
         }
 
     @classmethod
     def betterproto_renamed_proto_names_to_value(cls) -> dict[str, int]:
         return {
             "CAMERA_FRAME_FORMAT_UNSPECIFIED": 0,
-            "CAMERA_FRAME_FORMAT_BGRA8": 1,
+            "CAMERA_FRAME_FORMAT_RGBA8": 1,
         }
 
 
@@ -65,7 +65,7 @@ class CameraFrameFormat(betterproto2.Enum):
 class CameraFrame(betterproto2.Message):
     """
     CameraFrame は 1 フレーム分の raw pixel と metadata。
-    pixels の長さは必ず width * height * 4 (BGRA8 時)。
+    pixels の長さは必ず width * height * 4 (RGBA8 時)。
     """
 
     width: "int" = betterproto2.field(1, betterproto2.TYPE_INT32)

@@ -1,9 +1,15 @@
 """E2E: stream Camera frames from a live Resonite and record to MP4.
 
-Captures ~10 seconds of frames at 640x480 @ 10 fps through ``CameraClient``
+Captures ~10 seconds of frames at 640x480 @ 30 fps through ``CameraClient``
 and writes them to ``e2e_artifacts/camera_<timestamp>/capture.mp4`` using
 OpenCV. The first and last frame are also saved as PNG for quick visual
 inspection without needing a video player.
+
+ResoniteIO の Camera API は RGBA8 raw を返す (row 0 = 上端)。MP4 / H.264 は
+alpha 非対応なので cv2.cvtColor(RGBA2BGR) で alpha を落として 3-channel BGR と
+して書く。alpha 込みで保存したい場合は MOV (例えば PNG codec) や個別 PNG dump
+を使う必要があるが、本テストは「ユーザー画面が正しく映っているか」の visual
+verification 目的なので alpha drop で十分。
 
 Like every file under ``tests/e2e/`` the actual run requires the host-side
 ``just host-agent`` daemon plus a live Resonite client; without them the
@@ -28,14 +34,13 @@ from tests.helpers import mark_e2e
 
 ARTIFACT_ROOT = Path(__file__).parent / "e2e_artifacts"
 
-# 10 s × 10 fps = 100 frames nominal. Slack of 20 absorbs slow first-frame
-# warm-up (camera component creation, first RenderToBitmap) and per-frame
-# pacing jitter.
+# 10 s × 30 fps = 300 frames nominal. RenderToBitmap が重 world で 30fps を
+# 維持できない可能性を考慮し、最低 200 frames (= 実効 20fps) で OK とする。
 _CAPTURE_WIDTH = 640
 _CAPTURE_HEIGHT = 480
-_CAPTURE_FPS = 10.0
+_CAPTURE_FPS = 30.0
 _CAPTURE_SECONDS = 10.0
-_MIN_FRAMES = 80
+_MIN_FRAMES = 200
 
 # Resonite finishes engine bootstrap (UDS socket bind) before LocalUser/
 # focused world is ready. The bridge raises CameraNotReadyException →
@@ -98,10 +103,12 @@ class TestCameraStream:
                     height=_CAPTURE_HEIGHT,
                     fps_limit=_CAPTURE_FPS,
                 ):
-                    # ``frame.pixels`` is a read-only BGRA view over the
+                    # ``frame.pixels`` is a read-only RGBA view over the
                     # protobuf bytes; cvtColor copies into a fresh BGR
-                    # buffer that ``VideoWriter`` / ``imwrite`` accept.
-                    bgr = cv2.cvtColor(frame.pixels, cv2.COLOR_BGRA2BGR)
+                    # buffer (alpha dropped) that ``VideoWriter`` /
+                    # ``imwrite`` accept. RGBA を保持して動画化するなら
+                    # MOV + PNG codec 等を別途検討。
+                    bgr = cv2.cvtColor(frame.pixels, cv2.COLOR_RGBA2BGR)
                     writer.write(bgr)
                     if count == 0:
                         cv2.imwrite(str(first_png), bgr)

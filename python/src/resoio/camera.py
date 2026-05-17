@@ -1,6 +1,6 @@
 """Client for the Resonite IO ``Camera`` gRPC streaming service.
 
-The server emits raw BGRA8 frames with row 0 at the image top (fixed
+The server emits raw RGBA8 frames with row 0 at the image top (fixed
 ResoniteIO API). The Python client wraps each frame in a :class:`Frame`
 POCO whose ``pixels`` field is an ``(H, W, 4)`` ``numpy.uint8`` array,
 sharing memory with the underlying protobuf bytes (zero-copy view).
@@ -35,7 +35,7 @@ class Frame:
 
     ``pixels`` is a view over the protobuf payload bytes (read-only by
     default — call ``.copy()`` if you need a writable array). The byte
-    order is BGRA and row 0 is the image top.
+    order is RGBA and row 0 is the image top.
     """
 
     pixels: NDArray[np.uint8]
