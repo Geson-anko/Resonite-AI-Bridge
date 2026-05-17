@@ -2,6 +2,7 @@
 
 from importlib.metadata import version as _version
 
+from resoio.camera import CameraClient, Frame
 from resoio.session import (
     AmbiguousSocketError,
     SessionClient,
@@ -12,6 +13,8 @@ __version__: str = _version("resoio")
 
 __all__ = [
     "AmbiguousSocketError",
+    "CameraClient",
+    "Frame",
     "SessionClient",
     "SocketNotFoundError",
     "__version__",
