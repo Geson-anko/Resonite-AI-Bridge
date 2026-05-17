@@ -18,7 +18,9 @@ from datetime import datetime
 from pathlib import Path
 
 import cv2
+import grpclib
 import numpy as np
+from grpclib.const import Status
 from numpy.typing import NDArray
 
 from resoio.camera import CameraClient
@@ -34,6 +36,13 @@ _CAPTURE_HEIGHT = 480
 _CAPTURE_FPS = 10.0
 _CAPTURE_SECONDS = 10.0
 _MIN_FRAMES = 80
+
+# Resonite finishes engine bootstrap (UDS socket bind) before LocalUser/
+# focused world is ready. The bridge raises CameraNotReadyException →
+# FailedPrecondition during this window; client retries until a world is
+# loaded (matches the documented "client は再 stream で retry" contract).
+_CAMERA_READY_TIMEOUT_S = 120.0
+_CAMERA_READY_RETRY_INTERVAL_S = 2.0
 
 
 class TestCameraStream:
@@ -60,7 +69,26 @@ class TestCameraStream:
             (_CAPTURE_WIDTH, _CAPTURE_HEIGHT),
         )
 
+        async def wait_for_camera_ready() -> None:
+            ready_deadline = time.monotonic() + _CAMERA_READY_TIMEOUT_S
+            while True:
+                try:
+                    async with CameraClient() as cam:
+                        async for _ in cam.stream(width=1, height=1, fps_limit=1.0):
+                            return  # first frame proves bridge is ready
+                except grpclib.exceptions.GRPCError as e:
+                    if e.status != Status.FAILED_PRECONDITION:
+                        raise
+                    if time.monotonic() > ready_deadline:
+                        raise TimeoutError(
+                            f"Camera bridge did not become ready in "
+                            f"{_CAMERA_READY_TIMEOUT_S:.0f}s "
+                            f"(last reason: {e.message})"
+                        ) from e
+                    await asyncio.sleep(_CAMERA_READY_RETRY_INTERVAL_S)
+
         async def capture() -> int:
+            await wait_for_camera_ready()
             count = 0
             last_bgr: NDArray[np.uint8] | None = None
             deadline = time.monotonic() + _CAPTURE_SECONDS
