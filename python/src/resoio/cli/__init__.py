@@ -20,11 +20,11 @@ from types import ModuleType
 
 import argcomplete
 
-from resoio.cli import ping
+from resoio.cli import capture, ping
 
 __all__ = ["main"]
 
-_COMMAND_MODULES: list[ModuleType] = [ping]
+_COMMAND_MODULES: list[ModuleType] = [ping, capture]
 
 
 def _resolve_version() -> str:
